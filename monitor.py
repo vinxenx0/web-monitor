@@ -139,9 +139,11 @@ class Resultado(Base):
     h2_falta = Column(Integer)
     h2_no_secuencial = Column(Integer)
 
+
 class Diccionario(Base):
     __tablename__ = 'diccionario'
     palabra = Column(String(255), primary_key=True)
+
 
 # Definir el modelo de la tabla "sumario"
 class Sumario(Base):
@@ -332,12 +334,13 @@ def analizar_ortografia(texto,
             #palabras_excluidas.update(provincias_espanolas)
             #palabras_excluidas.update(comunidades_autonomas_espanolas)
 
-            print(PALABRAS_DICCIONARIO)
+            #print(PALABRAS_DICCIONARIO)
             # Agrega palabras personalizadas excluidas
             palabras = {
                 palabra
-                for palabra in texto_limpio.split() if
-                palabra.lower() not in PALABRAS_DICCIONARIO and len(palabra) >= 4
+                for palabra in texto_limpio.split()
+                if palabra.lower() not in PALABRAS_DICCIONARIO
+                and len(palabra) >= 4
             }
 
             # Filtra palabras que tengan TODOS los signos de puntuación, interrogación, exclamación, caracteres especiales o símbolos de moneda
@@ -823,7 +826,9 @@ def ejecutar_pa11y(url_actual):
         # Ejecuta pa11y y captura la salida directamente
         #command = f"pa11y --standard WCAG2AAA  --ignore issue-code-1 --ignore issue-code-2 --reporter csv {url_actual}"
         #command = f"pa11y --standard WCAG2AA  --reporter csv {url_actual}"
-        command = f"pa11y {url_actual} --reporter csv "
+        #print("url p4lly:")
+        #print(url_actual)
+        command = f"pa11y -T 1 --ignore issue-code-2 -r csv {url_actual}"
         process = subprocess.run(command,
                                  shell=True,
                                  check=True,
@@ -847,6 +852,9 @@ def ejecutar_pa11y(url_actual):
         # Obtiene la salida del comando pa11y (sin la primera lÃ­nea que es la cabecera)
         pa11y_results_lines = process.stdout.strip().split('\n')[1:]
 
+        #print("resultados:")
+        #print(process.stdout)
+
         # Reformatea los resultados de pa11y en una lista de objetos
         pa11y_results_list = []
         for line in pa11y_results_lines:
@@ -863,10 +871,9 @@ def ejecutar_pa11y(url_actual):
         # Verifica si el resultado de pa11y contiene datos
         return pa11y_results_list
     except Exception as e:  # subprocess.CalledProcessError as e:
-        #    error_message = f"Error al ejecutar pa11y para {url_actual}: {e}"
-        #    print(error_message)
-        return [
-        ]  #[{"type": "pa11y error", "code": "execution-error", "message": error_message, "context": "", "selector": ""}]
+        error_message = f"Error al ejecutar pa11y para {url_actual}: {e}"
+        print(error_message)
+        return []
 
 
 def escanear_dominio(url_dominio, exclusiones=[], extensiones_excluidas=[]):
@@ -1524,8 +1531,10 @@ if __name__ == "__main__":
         resumen_escaneo = {}
 
         # Extraer todas las palabras de la columna "palabra" de la tabla "diccionario"
-        PALABRAS_DICCIONARIO = [row.palabra for row in session.query(Diccionario).all()]
-        print(PALABRAS_DICCIONARIO)
+        PALABRAS_DICCIONARIO = [
+            row.palabra for row in session.query(Diccionario).all()
+        ]
+        #print(PALABRAS_DICCIONARIO)
 
         for url in urls_a_escanear:
             start_time = time.time()
