@@ -26,7 +26,7 @@ from urllib.parse import urlparse, urljoin
 import aspell
 import string
 import langid
-from sqlalchemy import func, create_engine, Column, Integer, String, Text, DateTime, JSON, desc, update, Float
+from sqlalchemy import Boolean, func, create_engine, Column, Integer, String, Text, DateTime, JSON, desc, update, Float
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.exc import IntegrityError, OperationalError
@@ -144,6 +144,11 @@ class Diccionario(Base):
     __tablename__ = 'diccionario'
     palabra = Column(String(255), primary_key=True)
 
+class Configuracion(Base):
+    __tablename__ = 'configuracion'
+    id = Column(Integer, primary_key=True)
+    is_running = Column(Boolean)
+
 
 # Definir el modelo de la tabla "sumario"
 class Sumario(Base):
@@ -202,6 +207,45 @@ class Sumario(Base):
     total_h2_multiple = Column(Integer)
     total_h2_falta = Column(Integer)
     total_h2_no_secuencial = Column(Integer)
+
+
+def crear_lock(session):
+    try:
+        # Obtener la ruta actual del directorio
+        directorio_actual = os.getcwd()
+        # Comprobar si ya existe el archivo .lock
+        if os.path.exists(os.path.join(directorio_actual, '.lock')):
+            print("El archivo .lock ya existe. El script no se ejecutará.")
+            return False
+        else:
+            # Crear el archivo .lock
+            with open(os.path.join(directorio_actual, '.lock'), 'w'):
+                pass  # No necesitamos escribir contenido en el archivo
+            print("Archivo .lock creado. El script se ejecutará.")
+            # Actualizar el campo is_running a False en la tabla de configuración
+            session.query(Configuracion).update({Configuracion.is_running: False})
+            session.commit()  # Confirmar la transacción
+            return True
+    except Exception as e:
+        print("Error al crear el archivo .lock:", e)
+        return False
+
+
+def eliminar_lock(session):
+    try:
+        # Obtener la ruta actual del directorio
+        directorio_actual = os.getcwd()
+        # Eliminar el archivo .lock si existe
+        if os.path.exists(os.path.join(directorio_actual, '.lock')):
+            os.remove(os.path.join(directorio_actual, '.lock'))
+            print("Archivo .lock eliminado.")
+            # Actualizar el campo is_running a True en la tabla de configuración
+            session.query(Configuracion).update({Configuracion.is_running: True})
+            session.commit()  # Confirmar la transacción
+        else:
+            print("No se encontró el archivo .lock.")
+    except Exception as e:
+        print("Error al eliminar el archivo .lock:", e)
 
 
 def guardar_en_resultados(session, resultado):
@@ -1491,6 +1535,7 @@ from config import DOMINIOS_ESPECIFICOS, USER, PWD, HOST, DB, PATRONES_EXCLUSION
 
 if __name__ == "__main__":
 
+
     # Directorios a verificar y crear si no existen
     directorios = ['logs', 'offline', 'results']
 
@@ -1526,785 +1571,794 @@ if __name__ == "__main__":
     # InicializaciÃ³n de la sesiÃ³n de SQLAlchemy
     Session = sessionmaker(bind=engine)
 
-    with Session() as session:
-        idiomas_por_dominio = {}
-        resumen_escaneo = {}
+    session = Session()
 
-        # Extraer todas las palabras de la columna "palabra" de la tabla "diccionario"
-        PALABRAS_DICCIONARIO = [
-            row.palabra for row in session.query(Diccionario).all()
-        ]
-        #print(PALABRAS_DICCIONARIO)
+    if crear_lock(session):
+        try:
+            idiomas_por_dominio = {}
+            resumen_escaneo = {}
 
-        for url in urls_a_escanear:
-            start_time = time.time()
-            hora_inicio = datetime.now().strftime('%H:%M:%S')
-
-            id_escaneo = secrets.token_hex(32)
-
-            resultados_dominio = escanear_dominio(url, patrones_exclusion,
-                                                  extensiones_excluidas)
-            end_time = time.time()
-
-            duracion_total = end_time - start_time
-            codigos_respuesta = [
-                resultado['codigo_respuesta']
-                for resultado in resultados_dominio
+            # Extraer todas las palabras de la columna "palabra" de la tabla "diccionario"
+            PALABRAS_DICCIONARIO = [
+                row.palabra for row in session.query(Diccionario).all()
             ]
-            total_paginas = len(resultados_dominio)
-
-            # Verificar si la URL analizada es vÃ¡lida
-            parsed_url = urlparse(url)
-            if parsed_url.netloc:
-                dominio = parsed_url.netloc
-                # Crear un nuevo contador para cada dominio
-                idiomas_encontrados = Counter()
-
-                for pagina in resultados_dominio:
-                    lang = pagina.get('lang')
-                    if lang:
-                        idiomas_encontrados[lang] += 1
-
-                idiomas_por_dominio[dominio] = idiomas_encontrados.copy()
-
-                print("idiomas por dominio")
-                print(idiomas_por_dominio)
-
-                print("idiomas encontrados")
-                print(idiomas_encontrados)
-
-                resumen_escaneo[dominio] = {
-                    'dominio':
-                    dominio,
-                    'total_paginas':
-                    total_paginas,
-                    'duracion_total':
-                    duracion_total,
-                    'codigos_respuesta':
-                    dict(
-                        zip(codigos_respuesta, [
-                            codigos_respuesta.count(c)
-                            for c in codigos_respuesta
-                        ])),
-                    'hora_inicio':
-                    hora_inicio,
-                    'hora_fin':
-                    datetime.now().strftime('%H:%M:%S'),
-                    'fecha':
-                    datetime.now().strftime('%Y-%m-%d'),
-                    'html_valid_count':
-                    sum(1 for pagina in resultados_dominio
-                        if pagina.get('html_valid')),
-                    'content_valid_count':
-                    sum(1 for pagina in resultados_dominio
-                        if pagina.get('content_valid')),
-                    'responsive_valid_count':
-                    sum(1 for pagina in resultados_dominio
-                        if pagina.get('responsive_valid')),
-                    'valid_aaaa_pages':
-                    sum(1 for pagina in resultados_dominio
-                        if pagina.get('valid_aaa')),
-                    'idiomas':
-                    idiomas_encontrados,
-                    'enlaces_inseguros':
-                    sum(1 for pagina in resultados_dominio
-                        if pagina.get('enlaces_inseguros')),
-                    'paginas_inseguras':
-                    sum(1 for pagina in resultados_dominio
-                        if pagina.get('paginas_inseguras')),
-                    'total_404':
-                    sum(1 for pagina in resultados_dominio
-                        if pagina.get('total_404')),
-                    'pages_h1_dup':
-                    0,  # Nuevo campo
-                    'pages_img_1mb':
-                    0,  # Nuevo campo
-                    'id_escaneo':
-                    id_escaneo,
-                    'tiempo_medio':
-                    None,
-                    'pages_err_orto':
-                    0,  # sum(1 for pagina in resultados_dominio if pagina.get('num_errores_ortograficos') >= 1),
-                    'pages_alt_vacias':
-                    0,  #sum(1 for pagina in resultados_dominio if pagina.get('alt_vacias') >= 1)
-                    'peso_total_paginas':
-                    0,
-                    'pdf_count':
-                    -1,
-                    'html_count':
-                    -1,
-                    'others_count':
-                    -1,
-                    'media_frases':
-                    0,
-                    'total_media_palabras_frase':
-                    0,
-                    'media_flesh_score':
-                    0,
-                    'total_meta_description_mas_155_caracteres':
-                    0,
-                    'total_meta_description_duplicado':
-                    0,
-                    'total_canonicals_falta':
-                    0,
-                    'total_directivas_noindex':
-                    0,
-                    'total_falta_encabezado_x_content_type_options':
-                    0,
-                    'total_falta_encabezado_secure_referrer_policy':
-                    0,
-                    'total_falta_encabezado_content_security_policy':
-                    0,
-                    'total_falta_encabezado_x_frame_options':
-                    0,
-                    'total_titulos_pagina_menos_30_caracteres':
-                    0,
-                    'total_meta_description_menos_70_caracteres':
-                    0,
-                    'total_titulos_pagina_mas_60_caracteres':
-                    0,
-                    'total_titulos_pagina_igual_h1':
-                    0,
-                    'total_titulos_pagina_duplicado':
-                    0,
-                    'total_meta_description_falta':
-                    0,
-                    'total_h2_duplicado':
-                    0,
-                    'total_h2_mas_70_caracteres':
-                    0,
-                    'total_h2_multiple':
-                    0,
-                    'total_h2_falta':
-                    0,
-                    'total_h2_no_secuencial':
-                    0
-                }
-
-                guardar_en_csv_y_json(resultados_dominio,
-                                      f"{dominio}_resultados")
-
-                with Session() as session:
-                    for resultado_pagina in resultados_dominio:
-                        if 'pagina' in resultado_pagina and isinstance(
-                                resultado_pagina['pagina'], str):
-                            resultado_pagina['pagina'] = resultado_pagina[
-                                'pagina'].encode('utf-8')
-                            resultado_pagina['id_escaneo'] = id_escaneo
-                            resultado = Resultado(**resultado_pagina)
-                            guardar_en_resultados(session, resultado)
-                        else:
-                            print(
-                                f"La URL {url} no se pudo analizar correctamente."
-                            )
-
-        with Session() as session:
-            for url, resumen in resumen_escaneo.items():
-                sumario = Sumario(**resumen)
-                sumario.idiomas = str(dict(idiomas_por_dominio[url]))
-                guardar_en_sumario(session, sumario)
-
-        with Session() as session:
-            with session.no_autoflush:
-                for dominio, resumen in resumen_escaneo.items():
-                    # Obtener la fecha más reciente para el dominio
-                    most_recent_date = session.query(
-                        func.max(Resultado.fecha_escaneo)).filter(
-                            Resultado.dominio == dominio).scalar()
-
-                    most_recent_id_escaneo = resumen['id_escaneo']
-
-                    # Si no hay registros para el dominio, continuar con el siguiente
-                    if most_recent_date is None:
-                        continue
-
-                    suma_media_frases = session.query(
-                        func.sum(Resultado.frases)).filter(
-                            Resultado.dominio == dominio,
-                            Resultado.codigo_respuesta == 200,
-                            Resultado.id_escaneo == most_recent_id_escaneo,
-                            Resultado.frases > 0
-                            #Resultado.fecha_escaneo == most_recent_date
-                        ).scalar()
-
-                    print(total_paginas)
-                    print(suma_media_frases)
-
-                    suma_media_frases = suma_media_frases if suma_media_frases is not None else 0
-
-                    if total_paginas is not None and suma_media_frases is not None and total_paginas != 0:
-                        media_frases = suma_media_frases / total_paginas
-                    else:
-                        media_frases = 0
-
-                    print(f"media_frases : {media_frases }")
-
-                    suma_media_palabras_frase = session.query(
-                        func.sum(Resultado.media_palabras_frase)).filter(
-                            Resultado.dominio == dominio,
-                            Resultado.codigo_respuesta == 200,
-                            Resultado.id_escaneo == most_recent_id_escaneo,
-                            Resultado.media_palabras_frase >= 0
-                            #Resultado.fecha_escaneo == most_recent_date
-                        ).scalar()
-
-                    suma_media_palabras_frase = suma_media_palabras_frase if suma_media_palabras_frase is not None else 0
-
-                    if total_paginas is not None and suma_media_palabras_frase is not None and total_paginas != 0:
-                        total_media_palabras_frase = suma_media_palabras_frase / total_paginas
-                    else:
-                        total_media_palabras_frase = 0
-
-                    print(
-                        f"total_media_palabras_frase : {total_media_palabras_frase}"
-                    )
-
-                    suma_flesh_scores = session.query(
-                        func.sum(Resultado.flesh_score)).filter(
-                            Resultado.dominio == dominio,
-                            Resultado.codigo_respuesta == 200,
-                            Resultado.id_escaneo == most_recent_id_escaneo,
-                            Resultado.flesh_score >= 0
-                            #Resultado.fecha_escaneo == most_recent_date
-                        ).scalar()
-
-                    suma_flesh_scores = suma_flesh_scores if suma_flesh_scores is not None else 0
-
-                    if total_paginas is not None and suma_flesh_scores is not None and total_paginas != 0:
-                        media_flesh_score = suma_flesh_scores / total_paginas
-                    else:
-                        media_flesh_score = 0
-
-                    # Imprime o utiliza la media_ponderada como sea necesario
-                    print(f"Media flesh score: {media_flesh_score}")
-
-                    resultados_tmp_20 = session.query(Resultado).filter(
-                        Resultado.dominio == dominio,
-                        Resultado.codigo_respuesta == 200,
-                        Resultado.id_escaneo == most_recent_id_escaneo,
-                        Resultado.meta_description_mas_155_caracteres > 0
-                        #Resultado.fecha_escaneo == most_recent_date
-                    ).all()
-
-                    total_meta_description_mas_155_caracteres = len(
-                        resultados_tmp_20)
-
-                    print(
-                        f"total_meta_description_mas_155_caracteres: {total_meta_description_mas_155_caracteres}"
-                    )
-
-                    resultados_tmp_19 = session.query(Resultado).filter(
-                        Resultado.dominio == dominio,
-                        Resultado.codigo_respuesta == 200,
-                        Resultado.id_escaneo == most_recent_id_escaneo,
-                        Resultado.meta_description_duplicado > 0
-                        #Resultado.fecha_escaneo == most_recent_date
-                    ).all()
-
-                    total_meta_description_duplicado = len(resultados_tmp_19)
-
-                    print(
-                        f"total_meta_description_duplicado: {total_meta_description_duplicado}"
-                    )
-
-                    resultados_tmp_18 = session.query(Resultado).filter(
-                        Resultado.dominio == dominio,
-                        Resultado.codigo_respuesta == 200,
-                        Resultado.id_escaneo == most_recent_id_escaneo,
-                        Resultado.canonicals_falta > 0
-                        #Resultado.fecha_escaneo == most_recent_date
-                    ).all()
-
-                    total_canonicals_falta = len(resultados_tmp_18)
-
-                    print(f"total_canonicals_falta: {total_canonicals_falta}")
-
-                    resultados_tmp_17 = session.query(Resultado).filter(
-                        Resultado.dominio == dominio,
-                        Resultado.codigo_respuesta == 200,
-                        Resultado.id_escaneo == most_recent_id_escaneo,
-                        Resultado.directivas_noindex > 0
-                        #Resultado.fecha_escaneo == most_recent_date
-                    ).all()
-
-                    total_directivas_noindex = len(resultados_tmp_17)
-
-                    print(
-                        f"total_directivas_noindex: {total_directivas_noindex}"
-                    )
-
-                    resultados_tmp_16 = session.query(Resultado).filter(
-                        Resultado.dominio == dominio,
-                        Resultado.codigo_respuesta == 200,
-                        Resultado.id_escaneo == most_recent_id_escaneo,
-                        Resultado.falta_encabezado_x_content_type_options > 0
-                        #Resultado.fecha_escaneo == most_recent_date
-                    ).all()
-
-                    total_falta_encabezado_x_content_type_options = len(
-                        resultados_tmp_16)
-
-                    print(
-                        f"total_falta_encabezado_x_content_type_options: {total_falta_encabezado_x_content_type_options}"
-                    )
-
-                    resultados_tmp_15 = session.query(Resultado).filter(
-                        Resultado.dominio == dominio,
-                        Resultado.codigo_respuesta == 200,
-                        Resultado.id_escaneo == most_recent_id_escaneo,
-                        Resultado.falta_encabezado_secure_referrer_policy > 0
-                        #Resultado.fecha_escaneo == most_recent_date
-                    ).all()
-
-                    total_falta_encabezado_secure_referrer_policy = len(
-                        resultados_tmp_15)
-
-                    print(
-                        f"total_falta_encabezado_secure_referrer_policy : {total_falta_encabezado_secure_referrer_policy }"
-                    )
-
-                    resultados_tmp_14 = session.query(Resultado).filter(
-                        Resultado.dominio == dominio,
-                        Resultado.codigo_respuesta == 200,
-                        Resultado.id_escaneo == most_recent_id_escaneo,
-                        Resultado.falta_encabezado_content_security_policy > 0
-                        #Resultado.fecha_escaneo == most_recent_date
-                    ).all()
-
-                    total_falta_encabezado_content_security_policy = len(
-                        resultados_tmp_14)
-
-                    print(
-                        f"total_falta_encabezado_content_security_policy : {total_falta_encabezado_content_security_policy}"
-                    )
-
-                    resultados_tmp_13 = session.query(Resultado).filter(
-                        Resultado.dominio == dominio,
-                        Resultado.codigo_respuesta == 200,
-                        Resultado.id_escaneo == most_recent_id_escaneo,
-                        Resultado.falta_encabezado_x_frame_options > 0
-                        #Resultado.fecha_escaneo == most_recent_date
-                    ).all()
-
-                    total_falta_encabezado_x_frame_options = len(
-                        resultados_tmp_13)
-
-                    print(
-                        f"total_falta_encabezado_x_frame_options : {total_falta_encabezado_x_frame_options}"
-                    )
-
-                    resultados_tmp_12 = session.query(Resultado).filter(
-                        Resultado.dominio == dominio,
-                        Resultado.codigo_respuesta == 200,
-                        Resultado.id_escaneo == most_recent_id_escaneo,
-                        Resultado.titulos_pagina_menos_30_caracteres > 0
-                        #Resultado.fecha_escaneo == most_recent_date
-                    ).all()
-
-                    total_titulos_pagina_menos_30_caracteres = len(
-                        resultados_tmp_12)
-
-                    print(
-                        f"total_titulos_pagina_menos_30_caracteres : {total_titulos_pagina_menos_30_caracteres}"
-                    )
-
-                    resultados_tmp_11 = session.query(Resultado).filter(
-                        Resultado.dominio == dominio,
-                        Resultado.codigo_respuesta == 200,
-                        Resultado.id_escaneo == most_recent_id_escaneo,
-                        Resultado.meta_description_menos_70_caracteres > 0
-                        #Resultado.fecha_escaneo == most_recent_date
-                    ).all()
-
-                    total_meta_description_menos_70_caracteres = len(
-                        resultados_tmp_11)
-
-                    print(
-                        f"total_meta_description_menos_70_caracteres : {total_meta_description_menos_70_caracteres}"
-                    )
-
-                    resultados_tmp_10 = session.query(Resultado).filter(
-                        Resultado.dominio == dominio,
-                        Resultado.codigo_respuesta == 200,
-                        Resultado.id_escaneo == most_recent_id_escaneo,
-                        Resultado.titulos_pagina_mas_60_caracteres > 0
-                        #Resultado.fecha_escaneo == most_recent_date
-                    ).all()
-
-                    total_titulos_pagina_mas_60_caracteres = len(
-                        resultados_tmp_10)
-
-                    print(
-                        f"total_titulos_pagina_mas_60_caracteres  : {total_titulos_pagina_mas_60_caracteres}"
-                    )
-
-                    resultados_tmp_9 = session.query(Resultado).filter(
-                        Resultado.dominio == dominio,
-                        Resultado.codigo_respuesta == 200,
-                        Resultado.id_escaneo == most_recent_id_escaneo,
-                        Resultado.titulos_pagina_igual_h1 > 0
-                        #Resultado.fecha_escaneo == most_recent_date
-                    ).all()
-
-                    total_titulos_pagina_igual_h1 = len(resultados_tmp_9)
-
-                    print(
-                        f"total_titulos_pagina_igual_h1  : {total_titulos_pagina_igual_h1}"
-                    )
-
-                    resultados_tmp_8 = session.query(Resultado).filter(
-                        Resultado.dominio == dominio,
-                        Resultado.codigo_respuesta == 200,
-                        Resultado.id_escaneo == most_recent_id_escaneo,
-                        Resultado.titulos_pagina_duplicado > 0
-                        #Resultado.fecha_escaneo == most_recent_date
-                    ).all()
-
-                    total_titulos_pagina_duplicado = len(resultados_tmp_8)
-
-                    print(
-                        f"total_titulos_pagina_duplicado   : {total_titulos_pagina_duplicado }"
-                    )
-
-                    #resultados_tmp_7 = session.query(Resultado).filter(
-                    #    Resultado.dominio == dominio,
-                    #    Resultado.codigo_respuesta == 200,
-                    #    Resultado.id_escaneo == most_recent_id_escaneo,
-                    #    Resultado.titulos_pagina_duplicado > 0
-                    #    #Resultado.fecha_escaneo == most_recent_date
-                    #).all()
-
-                    #total_media_palabras_frase = len(resultados_tmp_7)
-
-                    #print(f"total_media_palabras_frase : {total_media_palabras_frase}")
-
-                    resultados_tmp_6 = session.query(Resultado).filter(
-                        Resultado.dominio == dominio,
-                        Resultado.codigo_respuesta == 200,
-                        Resultado.id_escaneo == most_recent_id_escaneo,
-                        Resultado.meta_description_falta > 0
-                        #Resultado.fecha_escaneo == most_recent_date
-                    ).all()
-
-                    total_meta_description_falta = len(resultados_tmp_6)
-
-                    print(
-                        f"total_meta_description_falta    : {total_meta_description_falta}"
-                    )
-
-                    resultados_tmp_5 = session.query(Resultado).filter(
-                        Resultado.dominio == dominio,
-                        Resultado.codigo_respuesta == 200,
-                        Resultado.id_escaneo == most_recent_id_escaneo,
-                        Resultado.h2_duplicado > 0
-                        #Resultado.fecha_escaneo == most_recent_date
-                    ).all()
-
-                    total_h2_duplicado = len(resultados_tmp_5)
-
-                    print(f"total_h2_duplicado  : {total_h2_duplicado}")
-
-                    resultados_tmp_4 = session.query(Resultado).filter(
-                        Resultado.dominio == dominio,
-                        Resultado.codigo_respuesta == 200,
-                        Resultado.id_escaneo == most_recent_id_escaneo,
-                        Resultado.h2_mas_70_caracteres > 0
-                        #Resultado.fecha_escaneo == most_recent_date
-                    ).all()
-
-                    total_h2_mas_70_caracteres = len(resultados_tmp_4)
-
-                    print(
-                        f"total_h2_mas_70_caracteres : {total_h2_mas_70_caracteres}"
-                    )
-
-                    resultados_tmp_3 = session.query(Resultado).filter(
-                        Resultado.dominio == dominio,
-                        Resultado.codigo_respuesta == 200,
-                        Resultado.id_escaneo == most_recent_id_escaneo,
-                        Resultado.h2_multiple > 0
-                        #Resultado.fecha_escaneo == most_recent_date
-                    ).all()
-
-                    total_h2_multiple = len(resultados_tmp_3)
-
-                    print(f"total_h2_multiple : {total_h2_multiple}")
-
-                    resultados_tmp_2 = session.query(Resultado).filter(
-                        Resultado.dominio == dominio,
-                        Resultado.codigo_respuesta == 200,
-                        Resultado.id_escaneo == most_recent_id_escaneo,
-                        Resultado.h2_falta > 0
-                        #Resultado.fecha_escaneo == most_recent_date
-                    ).all()
-
-                    total_h2_falta = len(resultados_tmp_2)
-
-                    print(f"total_h2_falta: {total_h2_falta}")
-
-                    # Seleccionar los registros de la tabla que cumplen las condiciones
-                    resultados_tmp_1 = session.query(Resultado).filter(
-                        Resultado.dominio == dominio,
-                        Resultado.codigo_respuesta == 200,
-                        Resultado.id_escaneo == most_recent_id_escaneo,
-                        Resultado.h2_no_secuencial > 0
-                        #Resultado.fecha_escaneo == most_recent_date
-                    ).all()
-
-                    total_h2_no_secuencial = len(resultados_tmp_1)
-
-                    print(f"total_h2_no_secuencial: {total_h2_no_secuencial}")
-
-                    # Seleccionar los registros de la tabla que cumplen las condiciones
-                    resultados_404 = session.query(Resultado).filter(
-                        Resultado.dominio == dominio,
-                        Resultado.codigo_respuesta == 404,
-                        Resultado.id_escaneo == most_recent_id_escaneo
-                        #Resultado.fecha_escaneo == most_recent_date
-                    ).all()
-
-                    # Obtener el número total de registros resultantes de esa consulta
-                    total_404 = len(resultados_404)
-
-                    # Imprimir el número total y los IDs de escaneo
-                    print(
-                        f"Total de registros 404 para el dominio {dominio}: {total_404}"
-                    )
-
-                    # Seleccionar los registros de la tabla que cumplen las condiciones
-                    resultados_pdf = session.query(Resultado).filter(
-                        Resultado.dominio == dominio, Resultado.is_pdf == 1,
-                        Resultado.id_escaneo == most_recent_id_escaneo
-                        #Resultado.fecha_escaneo == most_recent_date
-                    ).all()
-
-                    pdf_count = len(resultados_pdf)
-
-                    print(f"Total pdf: {pdf_count }")
-
-                    # Seleccionar los registros de la tabla que cumplen las condiciones
-                    resultados_html = session.query(Resultado).filter(
-                        Resultado.dominio == dominio, Resultado.is_pdf == 2,
-                        Resultado.id_escaneo == most_recent_id_escaneo
-                        #Resultado.fecha_escaneo == most_recent_date
-                    ).all()
-
-                    html_count = len(resultados_html)
-                    print(f"Total html_coun: {html_count}")
-
-                    # Seleccionar los registros de la tabla que cumplen las condiciones
-                    resultados_others = session.query(Resultado).filter(
-                        Resultado.dominio == dominio, Resultado.is_pdf == 0,
-                        Resultado.id_escaneo == most_recent_id_escaneo
-                        #Resultado.fecha_escaneo == most_recent_date
-                    ).all()
-
-                    others_count = len(resultados_others)
-                    print(f"Total others_count: {others_count}")
-
-                    # Obtener el id_escaneo más reciente para el dominio
-                    most_recent_id_escaneo = resumen['id_escaneo']
-
-                    # Si no hay registros en el sumario para el dominio, continuar con el siguiente
-                    if most_recent_id_escaneo is not None:
-                        # Seleccionar los registros de la tabla que cumplen las condiciones
-                        resultados_errores_ortograficos = session.query(
-                            Resultado).filter(
+            #print(PALABRAS_DICCIONARIO)
+
+            for url in urls_a_escanear:
+                start_time = time.time()
+                hora_inicio = datetime.now().strftime('%H:%M:%S')
+
+                id_escaneo = secrets.token_hex(32)
+
+                resultados_dominio = escanear_dominio(url, patrones_exclusion,
+                                                    extensiones_excluidas)
+                end_time = time.time()
+
+                duracion_total = end_time - start_time
+                codigos_respuesta = [
+                    resultado['codigo_respuesta']
+                    for resultado in resultados_dominio
+                ]
+                total_paginas = len(resultados_dominio)
+
+                # Verificar si la URL analizada es vÃ¡lida
+                parsed_url = urlparse(url)
+                if parsed_url.netloc:
+                    dominio = parsed_url.netloc
+                    # Crear un nuevo contador para cada dominio
+                    idiomas_encontrados = Counter()
+
+                    for pagina in resultados_dominio:
+                        lang = pagina.get('lang')
+                        if lang:
+                            idiomas_encontrados[lang] += 1
+
+                    idiomas_por_dominio[dominio] = idiomas_encontrados.copy()
+
+                    print("idiomas por dominio")
+                    print(idiomas_por_dominio)
+
+                    print("idiomas encontrados")
+                    print(idiomas_encontrados)
+
+                    resumen_escaneo[dominio] = {
+                        'dominio':
+                        dominio,
+                        'total_paginas':
+                        total_paginas,
+                        'duracion_total':
+                        duracion_total,
+                        'codigos_respuesta':
+                        dict(
+                            zip(codigos_respuesta, [
+                                codigos_respuesta.count(c)
+                                for c in codigos_respuesta
+                            ])),
+                        'hora_inicio':
+                        hora_inicio,
+                        'hora_fin':
+                        datetime.now().strftime('%H:%M:%S'),
+                        'fecha':
+                        datetime.now().strftime('%Y-%m-%d'),
+                        'html_valid_count':
+                        sum(1 for pagina in resultados_dominio
+                            if pagina.get('html_valid')),
+                        'content_valid_count':
+                        sum(1 for pagina in resultados_dominio
+                            if pagina.get('content_valid')),
+                        'responsive_valid_count':
+                        sum(1 for pagina in resultados_dominio
+                            if pagina.get('responsive_valid')),
+                        'valid_aaaa_pages':
+                        sum(1 for pagina in resultados_dominio
+                            if pagina.get('valid_aaa')),
+                        'idiomas':
+                        idiomas_encontrados,
+                        'enlaces_inseguros':
+                        sum(1 for pagina in resultados_dominio
+                            if pagina.get('enlaces_inseguros')),
+                        'paginas_inseguras':
+                        sum(1 for pagina in resultados_dominio
+                            if pagina.get('paginas_inseguras')),
+                        'total_404':
+                        sum(1 for pagina in resultados_dominio
+                            if pagina.get('total_404')),
+                        'pages_h1_dup':
+                        0,  # Nuevo campo
+                        'pages_img_1mb':
+                        0,  # Nuevo campo
+                        'id_escaneo':
+                        id_escaneo,
+                        'tiempo_medio':
+                        None,
+                        'pages_err_orto':
+                        0,  # sum(1 for pagina in resultados_dominio if pagina.get('num_errores_ortograficos') >= 1),
+                        'pages_alt_vacias':
+                        0,  #sum(1 for pagina in resultados_dominio if pagina.get('alt_vacias') >= 1)
+                        'peso_total_paginas':
+                        0,
+                        'pdf_count':
+                        -1,
+                        'html_count':
+                        -1,
+                        'others_count':
+                        -1,
+                        'media_frases':
+                        0,
+                        'total_media_palabras_frase':
+                        0,
+                        'media_flesh_score':
+                        0,
+                        'total_meta_description_mas_155_caracteres':
+                        0,
+                        'total_meta_description_duplicado':
+                        0,
+                        'total_canonicals_falta':
+                        0,
+                        'total_directivas_noindex':
+                        0,
+                        'total_falta_encabezado_x_content_type_options':
+                        0,
+                        'total_falta_encabezado_secure_referrer_policy':
+                        0,
+                        'total_falta_encabezado_content_security_policy':
+                        0,
+                        'total_falta_encabezado_x_frame_options':
+                        0,
+                        'total_titulos_pagina_menos_30_caracteres':
+                        0,
+                        'total_meta_description_menos_70_caracteres':
+                        0,
+                        'total_titulos_pagina_mas_60_caracteres':
+                        0,
+                        'total_titulos_pagina_igual_h1':
+                        0,
+                        'total_titulos_pagina_duplicado':
+                        0,
+                        'total_meta_description_falta':
+                        0,
+                        'total_h2_duplicado':
+                        0,
+                        'total_h2_mas_70_caracteres':
+                        0,
+                        'total_h2_multiple':
+                        0,
+                        'total_h2_falta':
+                        0,
+                        'total_h2_no_secuencial':
+                        0
+                    }
+
+                    guardar_en_csv_y_json(resultados_dominio,
+                                        f"{dominio}_resultados")
+
+                    with Session() as session:
+                        for resultado_pagina in resultados_dominio:
+                            if 'pagina' in resultado_pagina and isinstance(
+                                    resultado_pagina['pagina'], str):
+                                resultado_pagina['pagina'] = resultado_pagina[
+                                    'pagina'].encode('utf-8')
+                                resultado_pagina['id_escaneo'] = id_escaneo
+                                resultado = Resultado(**resultado_pagina)
+                                guardar_en_resultados(session, resultado)
+                            else:
+                                print(
+                                    f"La URL {url} no se pudo analizar correctamente."
+                                )
+
+            with Session() as session:
+                for url, resumen in resumen_escaneo.items():
+                    sumario = Sumario(**resumen)
+                    sumario.idiomas = str(dict(idiomas_por_dominio[url]))
+                    guardar_en_sumario(session, sumario)
+
+            with Session() as session:
+                with session.no_autoflush:
+                    for dominio, resumen in resumen_escaneo.items():
+                        # Obtener la fecha más reciente para el dominio
+                        most_recent_date = session.query(
+                            func.max(Resultado.fecha_escaneo)).filter(
+                                Resultado.dominio == dominio).scalar()
+
+                        most_recent_id_escaneo = resumen['id_escaneo']
+
+                        # Si no hay registros para el dominio, continuar con el siguiente
+                        if most_recent_date is None:
+                            continue
+
+                        suma_media_frases = session.query(
+                            func.sum(Resultado.frases)).filter(
                                 Resultado.dominio == dominio,
                                 Resultado.codigo_respuesta == 200,
-                                ~func.locate('redirect=', Resultado.pagina),
-                                Resultado.num_errores_ortograficos > 0,
-                                Resultado.id_escaneo ==
-                                most_recent_id_escaneo).all()
+                                Resultado.id_escaneo == most_recent_id_escaneo,
+                                Resultado.frases > 0
+                                #Resultado.fecha_escaneo == most_recent_date
+                            ).scalar()
+
+                        print(total_paginas)
+                        print(suma_media_frases)
+
+                        suma_media_frases = suma_media_frases if suma_media_frases is not None else 0
+
+                        if total_paginas is not None and suma_media_frases is not None and total_paginas != 0:
+                            media_frases = suma_media_frases / total_paginas
+                        else:
+                            media_frases = 0
+
+                        print(f"media_frases : {media_frases }")
+
+                        suma_media_palabras_frase = session.query(
+                            func.sum(Resultado.media_palabras_frase)).filter(
+                                Resultado.dominio == dominio,
+                                Resultado.codigo_respuesta == 200,
+                                Resultado.id_escaneo == most_recent_id_escaneo,
+                                Resultado.media_palabras_frase >= 0
+                                #Resultado.fecha_escaneo == most_recent_date
+                            ).scalar()
+
+                        suma_media_palabras_frase = suma_media_palabras_frase if suma_media_palabras_frase is not None else 0
+
+                        if total_paginas is not None and suma_media_palabras_frase is not None and total_paginas != 0:
+                            total_media_palabras_frase = suma_media_palabras_frase / total_paginas
+                        else:
+                            total_media_palabras_frase = 0
 
                         print(
-                            f"Páginas con errores ortográficos para el dominio {dominio} en el último escaneo: {len(resultados_errores_ortograficos)}"
+                            f"total_media_palabras_frase : {total_media_palabras_frase}"
                         )
 
-                        base_folder = "offline"
-                        os.makedirs(base_folder, exist_ok=True)
+                        suma_flesh_scores = session.query(
+                            func.sum(Resultado.flesh_score)).filter(
+                                Resultado.dominio == dominio,
+                                Resultado.codigo_respuesta == 200,
+                                Resultado.id_escaneo == most_recent_id_escaneo,
+                                Resultado.flesh_score >= 0
+                                #Resultado.fecha_escaneo == most_recent_date
+                            ).scalar()
 
-                        for resultado in resultados_errores_ortograficos:
-                            # Descargar la página
-                            print(f"Descargando la página: {resultado.pagina}")
-                            response = requests.get(resultado.pagina)
+                        suma_flesh_scores = suma_flesh_scores if suma_flesh_scores is not None else 0
 
-                            if response.status_code == 200:
-                                # Parsear el HTML y buscar palabras de errores ortográficos
-                                soup = BeautifulSoup(response.text,
-                                                     'html.parser')
+                        if total_paginas is not None and suma_flesh_scores is not None and total_paginas != 0:
+                            media_flesh_score = suma_flesh_scores / total_paginas
+                        else:
+                            media_flesh_score = 0
 
-                                # Obtener el texto visible de la página
-                                texto_visible = soup.get_text()
+                        # Imprime o utiliza la media_ponderada como sea necesario
+                        print(f"Media flesh score: {media_flesh_score}")
 
-                                # Almacenar el número de frases en resultado.frases
-                                frases = re.split(r'[;.|,]', texto_visible)
-                                resultado.frases = len(frases)
+                        resultados_tmp_20 = session.query(Resultado).filter(
+                            Resultado.dominio == dominio,
+                            Resultado.codigo_respuesta == 200,
+                            Resultado.id_escaneo == most_recent_id_escaneo,
+                            Resultado.meta_description_mas_155_caracteres > 0
+                            #Resultado.fecha_escaneo == most_recent_date
+                        ).all()
 
-                                # Calcular la media de palabras por frase y almacenarla en resultado.media_palabras_frases
-                                palabras_por_frase = [
-                                    len(frase.split()) for frase in frases
-                                    if frase.strip()
-                                ]
-                                media_palabras_frase = sum(
-                                    palabras_por_frase) / len(
-                                        palabras_por_frase
-                                    ) if palabras_por_frase else 0
-                                resultado.media_palabras_frase = media_palabras_frase
+                        total_meta_description_mas_155_caracteres = len(
+                            resultados_tmp_20)
 
-                                # Calcular la prueba de legibilidad de Flesch-Kincaid y almacenarla en resultado.flesh
-                                try:
-                                    total_palabras = len(
-                                        re.findall(r'\b\w+\b', texto_visible))
-                                    total_oraciones = resultado.frases
-                                    #total_silabas = sum([textstat.syllable(word) for word in re.findall(r'\b\w+\b', texto_visible)])
-                                    total_silabas = sum([
-                                        textstat.lexicon_count(word, True)
-                                        for word in re.findall(
-                                            r'\b\w+\b', texto_visible)
-                                    ])
-                                    flesh_score = 206.835 - 1.015 * (
-                                        total_palabras / total_oraciones
-                                    ) - 84.6 * (total_silabas / total_palabras)
-                                    resultado.flesh_score = round(
-                                        flesh_score, 2)
-                                except ZeroDivisionError:
-                                    resultado.flesh_score = 0.0
-
-                                modified_html = response.text
-
-                                modified_html = str(soup).encode(
-                                    'utf-8').decode('utf-8', 'ignore')
-                                modified_html = ' '.join(
-                                    modified_html.split()
-                                )  # Eliminar espacios adicionales
-                                modified_html = modified_html.replace(
-                                    '\n', '').replace('\t',
-                                                      '').replace('\r', '')
-
-                                for palabra in resultado.errores_ortograficos:
-                                    # Encontrar la posición de la palabra en el HTML original
-                                    start_index = modified_html.find(palabra)
-
-                                    if start_index != -1:
-                                        modified_html = (
-                                            modified_html[:start_index] +
-                                            f'<span style="background-color:red!important;color:white!important;border:2px solid #fff!important">{palabra}</span>'
-                                            + modified_html[start_index +
-                                                            len(palabra):])
-
-                                # Campos a almacenar en la instancia de Resultado
-                                campos_html_copy = [
-                                    'html_copy', 'html_copy_dos',
-                                    'html_copy_tres', 'html_copy_cuatro',
-                                    'html_copy_cinco', 'html_copy_seis',
-                                    'html_copy_siete', 'html_copy_ocho',
-                                    'html_copy_nueve', 'html_copy_diez'
-                                ]
-
-                                # Inicializar campos
-                                for campo in campos_html_copy:
-                                    setattr(resultado, campo, '')
-
-                                # Generar la ruta del archivo
-                                domain_folder = os.path.join(
-                                    base_folder, resultado.dominio)
-                                os.makedirs(domain_folder, exist_ok=True)
-                                filename = f"{resultado.id}.html"
-                                filepath = os.path.join(
-                                    domain_folder, filename)
-
-                                # Escribir el HTML en el archivo
-                                with open(filepath, 'w',
-                                          encoding='utf-8') as file:
-                                    file.write(modified_html)
-
-                                print(f"HTML guardado en: {filepath}")
-
-                    else:
                         print(
-                            f"No hay registros en el sumario para el dominio {dominio}."
+                            f"total_meta_description_mas_155_caracteres: {total_meta_description_mas_155_caracteres}"
                         )
 
-                    # Obtener el objeto Sumario existente desde la base de datos
-                    sumario_existente = session.query(Sumario).filter_by(
-                        id_escaneo=resumen['id_escaneo']).first()
+                        resultados_tmp_19 = session.query(Resultado).filter(
+                            Resultado.dominio == dominio,
+                            Resultado.codigo_respuesta == 200,
+                            Resultado.id_escaneo == most_recent_id_escaneo,
+                            Resultado.meta_description_duplicado > 0
+                            #Resultado.fecha_escaneo == most_recent_date
+                        ).all()
 
-                    # Seleccionar los registros de la tabla que cumplen las condiciones
-                    resultados_tiempo_respuesta = session.query(
-                        Resultado
-                    ).filter(
-                        Resultado.dominio == dominio,
-                        Resultado.codigo_respuesta == 200,
-                        ~func.locate('redirect=', Resultado.pagina),
-                        Resultado.tiempo_respuesta.isnot(
-                            None
-                        ),  # Filtrar resultados con tiempo_respuesta no nulo
-                        Resultado.id_escaneo == most_recent_id_escaneo).all()
+                        total_meta_description_duplicado = len(resultados_tmp_19)
 
-                    print(
-                        f"Páginas con tiempo de respuesta para el dominio {dominio} en el último escaneo: {len(resultados_tiempo_respuesta)}"
-                    )
-
-                    # Calcular el tiempo medio de respuesta
-                    tiempo_total = sum(
-                        resultado.tiempo_respuesta
-                        for resultado in resultados_tiempo_respuesta)
-                    tiempo_medio = tiempo_total / len(
-                        resultados_tiempo_respuesta) if len(
-                            resultados_tiempo_respuesta) > 0 else 0
-
-                    # Verificar si se encontró un Sumario existente
-                    if sumario_existente:
-                        # Actualizar los campos necesarios
-                        sumario_existente.total_404 = total_404
-                        sumario_existente.tiempo_medio = tiempo_medio  # Nueva columna "tiempo_medio"
-                        sumario_existente.pdf_count = pdf_count
-                        sumario_existente.html_count = html_count
-                        sumario_existente.others_count = others_count
-                        sumario_existente.pages_err_orto = len(
-                            resultados_errores_ortograficos)
-
-                        sumario_existente.media_frases = media_frases
-                        sumario_existente.total_media_palabras_frase = total_media_palabras_frase
-                        sumario_existente.media_flesh_score = media_flesh_score
-                        sumario_existente.total_meta_description_mas_155_caracteres = total_meta_description_mas_155_caracteres
-                        sumario_existente.total_meta_description_duplicado = total_meta_description_duplicado
-                        sumario_existente.total_canonicals_falta = total_canonicals_falta
-                        sumario_existente.total_directivas_noindex = total_directivas_noindex
-                        sumario_existente.total_falta_encabezado_x_content_type_options = total_falta_encabezado_x_content_type_options
-                        sumario_existente.total_falta_encabezado_secure_referrer_policy = total_falta_encabezado_secure_referrer_policy
-                        sumario_existente.total_falta_encabezado_content_security_policy = total_falta_encabezado_content_security_policy
-                        sumario_existente.total_falta_encabezado_x_frame_options = total_falta_encabezado_x_frame_options
-                        sumario_existente.total_titulos_pagina_menos_30_caracteres = total_titulos_pagina_menos_30_caracteres
-                        sumario_existente.total_meta_description_menos_70_caracteres = total_meta_description_menos_70_caracteres
-                        sumario_existente.total_titulos_pagina_mas_60_caracteres = total_titulos_pagina_mas_60_caracteres
-                        sumario_existente.total_titulos_pagina_igual_h1 = total_titulos_pagina_igual_h1
-                        sumario_existente.total_titulos_pagina_duplicado = total_titulos_pagina_duplicado
-                        sumario_existente.total_meta_description_falta = total_meta_description_falta
-                        sumario_existente.total_h2_duplicado = total_h2_duplicado
-                        sumario_existente.total_h2_mas_70_caracteres = total_h2_mas_70_caracteres
-                        sumario_existente.total_h2_multiple = total_h2_multiple
-                        sumario_existente.total_h2_falta = total_h2_falta
-                        sumario_existente.total_h2_no_secuencial = total_h2_no_secuencial
-                    else:
-                        # Manejar el caso en que no se encontró el Sumario existente (puede imprimir un mensaje o lanzar una excepción según tus necesidades)
                         print(
-                            f"¡No se encontró un Sumario existente para el id_escaneo {resumen['id_escaneo']}!"
+                            f"total_meta_description_duplicado: {total_meta_description_duplicado}"
                         )
 
-                    # Confirmar los cambios en la base de datos
-                    session.commit()
+                        resultados_tmp_18 = session.query(Resultado).filter(
+                            Resultado.dominio == dominio,
+                            Resultado.codigo_respuesta == 200,
+                            Resultado.id_escaneo == most_recent_id_escaneo,
+                            Resultado.canonicals_falta > 0
+                            #Resultado.fecha_escaneo == most_recent_date
+                        ).all()
 
-    end_script_time = time.time()
-    script_duration = end_script_time - start_script_time
+                        total_canonicals_falta = len(resultados_tmp_18)
 
-    logging.info(
-        f'\nDuraciÃ³n total del script: {script_duration} segundos ({script_duration // 3600} horas y {(script_duration % 3600) // 60} minutos)'
-    )
+                        print(f"total_canonicals_falta: {total_canonicals_falta}")
 
-    print(
-        f'\nDuraciÃ³n total del script: {script_duration} segundos ({script_duration // 3600} horas y {(script_duration % 3600) // 60} minutos)'
-    )
+                        resultados_tmp_17 = session.query(Resultado).filter(
+                            Resultado.dominio == dominio,
+                            Resultado.codigo_respuesta == 200,
+                            Resultado.id_escaneo == most_recent_id_escaneo,
+                            Resultado.directivas_noindex > 0
+                            #Resultado.fecha_escaneo == most_recent_date
+                        ).all()
 
-    generar_informe_resumen(resumen_escaneo, 'resumen_escaneo.csv')
+                        total_directivas_noindex = len(resultados_tmp_17)
+
+                        print(
+                            f"total_directivas_noindex: {total_directivas_noindex}"
+                        )
+
+                        resultados_tmp_16 = session.query(Resultado).filter(
+                            Resultado.dominio == dominio,
+                            Resultado.codigo_respuesta == 200,
+                            Resultado.id_escaneo == most_recent_id_escaneo,
+                            Resultado.falta_encabezado_x_content_type_options > 0
+                            #Resultado.fecha_escaneo == most_recent_date
+                        ).all()
+
+                        total_falta_encabezado_x_content_type_options = len(
+                            resultados_tmp_16)
+
+                        print(
+                            f"total_falta_encabezado_x_content_type_options: {total_falta_encabezado_x_content_type_options}"
+                        )
+
+                        resultados_tmp_15 = session.query(Resultado).filter(
+                            Resultado.dominio == dominio,
+                            Resultado.codigo_respuesta == 200,
+                            Resultado.id_escaneo == most_recent_id_escaneo,
+                            Resultado.falta_encabezado_secure_referrer_policy > 0
+                            #Resultado.fecha_escaneo == most_recent_date
+                        ).all()
+
+                        total_falta_encabezado_secure_referrer_policy = len(
+                            resultados_tmp_15)
+
+                        print(
+                            f"total_falta_encabezado_secure_referrer_policy : {total_falta_encabezado_secure_referrer_policy }"
+                        )
+
+                        resultados_tmp_14 = session.query(Resultado).filter(
+                            Resultado.dominio == dominio,
+                            Resultado.codigo_respuesta == 200,
+                            Resultado.id_escaneo == most_recent_id_escaneo,
+                            Resultado.falta_encabezado_content_security_policy > 0
+                            #Resultado.fecha_escaneo == most_recent_date
+                        ).all()
+
+                        total_falta_encabezado_content_security_policy = len(
+                            resultados_tmp_14)
+
+                        print(
+                            f"total_falta_encabezado_content_security_policy : {total_falta_encabezado_content_security_policy}"
+                        )
+
+                        resultados_tmp_13 = session.query(Resultado).filter(
+                            Resultado.dominio == dominio,
+                            Resultado.codigo_respuesta == 200,
+                            Resultado.id_escaneo == most_recent_id_escaneo,
+                            Resultado.falta_encabezado_x_frame_options > 0
+                            #Resultado.fecha_escaneo == most_recent_date
+                        ).all()
+
+                        total_falta_encabezado_x_frame_options = len(
+                            resultados_tmp_13)
+
+                        print(
+                            f"total_falta_encabezado_x_frame_options : {total_falta_encabezado_x_frame_options}"
+                        )
+
+                        resultados_tmp_12 = session.query(Resultado).filter(
+                            Resultado.dominio == dominio,
+                            Resultado.codigo_respuesta == 200,
+                            Resultado.id_escaneo == most_recent_id_escaneo,
+                            Resultado.titulos_pagina_menos_30_caracteres > 0
+                            #Resultado.fecha_escaneo == most_recent_date
+                        ).all()
+
+                        total_titulos_pagina_menos_30_caracteres = len(
+                            resultados_tmp_12)
+
+                        print(
+                            f"total_titulos_pagina_menos_30_caracteres : {total_titulos_pagina_menos_30_caracteres}"
+                        )
+
+                        resultados_tmp_11 = session.query(Resultado).filter(
+                            Resultado.dominio == dominio,
+                            Resultado.codigo_respuesta == 200,
+                            Resultado.id_escaneo == most_recent_id_escaneo,
+                            Resultado.meta_description_menos_70_caracteres > 0
+                            #Resultado.fecha_escaneo == most_recent_date
+                        ).all()
+
+                        total_meta_description_menos_70_caracteres = len(
+                            resultados_tmp_11)
+
+                        print(
+                            f"total_meta_description_menos_70_caracteres : {total_meta_description_menos_70_caracteres}"
+                        )
+
+                        resultados_tmp_10 = session.query(Resultado).filter(
+                            Resultado.dominio == dominio,
+                            Resultado.codigo_respuesta == 200,
+                            Resultado.id_escaneo == most_recent_id_escaneo,
+                            Resultado.titulos_pagina_mas_60_caracteres > 0
+                            #Resultado.fecha_escaneo == most_recent_date
+                        ).all()
+
+                        total_titulos_pagina_mas_60_caracteres = len(
+                            resultados_tmp_10)
+
+                        print(
+                            f"total_titulos_pagina_mas_60_caracteres  : {total_titulos_pagina_mas_60_caracteres}"
+                        )
+
+                        resultados_tmp_9 = session.query(Resultado).filter(
+                            Resultado.dominio == dominio,
+                            Resultado.codigo_respuesta == 200,
+                            Resultado.id_escaneo == most_recent_id_escaneo,
+                            Resultado.titulos_pagina_igual_h1 > 0
+                            #Resultado.fecha_escaneo == most_recent_date
+                        ).all()
+
+                        total_titulos_pagina_igual_h1 = len(resultados_tmp_9)
+
+                        print(
+                            f"total_titulos_pagina_igual_h1  : {total_titulos_pagina_igual_h1}"
+                        )
+
+                        resultados_tmp_8 = session.query(Resultado).filter(
+                            Resultado.dominio == dominio,
+                            Resultado.codigo_respuesta == 200,
+                            Resultado.id_escaneo == most_recent_id_escaneo,
+                            Resultado.titulos_pagina_duplicado > 0
+                            #Resultado.fecha_escaneo == most_recent_date
+                        ).all()
+
+                        total_titulos_pagina_duplicado = len(resultados_tmp_8)
+
+                        print(
+                            f"total_titulos_pagina_duplicado   : {total_titulos_pagina_duplicado }"
+                        )
+
+                        #resultados_tmp_7 = session.query(Resultado).filter(
+                        #    Resultado.dominio == dominio,
+                        #    Resultado.codigo_respuesta == 200,
+                        #    Resultado.id_escaneo == most_recent_id_escaneo,
+                        #    Resultado.titulos_pagina_duplicado > 0
+                        #    #Resultado.fecha_escaneo == most_recent_date
+                        #).all()
+
+                        #total_media_palabras_frase = len(resultados_tmp_7)
+
+                        #print(f"total_media_palabras_frase : {total_media_palabras_frase}")
+
+                        resultados_tmp_6 = session.query(Resultado).filter(
+                            Resultado.dominio == dominio,
+                            Resultado.codigo_respuesta == 200,
+                            Resultado.id_escaneo == most_recent_id_escaneo,
+                            Resultado.meta_description_falta > 0
+                            #Resultado.fecha_escaneo == most_recent_date
+                        ).all()
+
+                        total_meta_description_falta = len(resultados_tmp_6)
+
+                        print(
+                            f"total_meta_description_falta    : {total_meta_description_falta}"
+                        )
+
+                        resultados_tmp_5 = session.query(Resultado).filter(
+                            Resultado.dominio == dominio,
+                            Resultado.codigo_respuesta == 200,
+                            Resultado.id_escaneo == most_recent_id_escaneo,
+                            Resultado.h2_duplicado > 0
+                            #Resultado.fecha_escaneo == most_recent_date
+                        ).all()
+
+                        total_h2_duplicado = len(resultados_tmp_5)
+
+                        print(f"total_h2_duplicado  : {total_h2_duplicado}")
+
+                        resultados_tmp_4 = session.query(Resultado).filter(
+                            Resultado.dominio == dominio,
+                            Resultado.codigo_respuesta == 200,
+                            Resultado.id_escaneo == most_recent_id_escaneo,
+                            Resultado.h2_mas_70_caracteres > 0
+                            #Resultado.fecha_escaneo == most_recent_date
+                        ).all()
+
+                        total_h2_mas_70_caracteres = len(resultados_tmp_4)
+
+                        print(
+                            f"total_h2_mas_70_caracteres : {total_h2_mas_70_caracteres}"
+                        )
+
+                        resultados_tmp_3 = session.query(Resultado).filter(
+                            Resultado.dominio == dominio,
+                            Resultado.codigo_respuesta == 200,
+                            Resultado.id_escaneo == most_recent_id_escaneo,
+                            Resultado.h2_multiple > 0
+                            #Resultado.fecha_escaneo == most_recent_date
+                        ).all()
+
+                        total_h2_multiple = len(resultados_tmp_3)
+
+                        print(f"total_h2_multiple : {total_h2_multiple}")
+
+                        resultados_tmp_2 = session.query(Resultado).filter(
+                            Resultado.dominio == dominio,
+                            Resultado.codigo_respuesta == 200,
+                            Resultado.id_escaneo == most_recent_id_escaneo,
+                            Resultado.h2_falta > 0
+                            #Resultado.fecha_escaneo == most_recent_date
+                        ).all()
+
+                        total_h2_falta = len(resultados_tmp_2)
+
+                        print(f"total_h2_falta: {total_h2_falta}")
+
+                        # Seleccionar los registros de la tabla que cumplen las condiciones
+                        resultados_tmp_1 = session.query(Resultado).filter(
+                            Resultado.dominio == dominio,
+                            Resultado.codigo_respuesta == 200,
+                            Resultado.id_escaneo == most_recent_id_escaneo,
+                            Resultado.h2_no_secuencial > 0
+                            #Resultado.fecha_escaneo == most_recent_date
+                        ).all()
+
+                        total_h2_no_secuencial = len(resultados_tmp_1)
+
+                        print(f"total_h2_no_secuencial: {total_h2_no_secuencial}")
+
+                        # Seleccionar los registros de la tabla que cumplen las condiciones
+                        resultados_404 = session.query(Resultado).filter(
+                            Resultado.dominio == dominio,
+                            Resultado.codigo_respuesta == 404,
+                            Resultado.id_escaneo == most_recent_id_escaneo
+                            #Resultado.fecha_escaneo == most_recent_date
+                        ).all()
+
+                        # Obtener el número total de registros resultantes de esa consulta
+                        total_404 = len(resultados_404)
+
+                        # Imprimir el número total y los IDs de escaneo
+                        print(
+                            f"Total de registros 404 para el dominio {dominio}: {total_404}"
+                        )
+
+                        # Seleccionar los registros de la tabla que cumplen las condiciones
+                        resultados_pdf = session.query(Resultado).filter(
+                            Resultado.dominio == dominio, Resultado.is_pdf == 1,
+                            Resultado.id_escaneo == most_recent_id_escaneo
+                            #Resultado.fecha_escaneo == most_recent_date
+                        ).all()
+
+                        pdf_count = len(resultados_pdf)
+
+                        print(f"Total pdf: {pdf_count }")
+
+                        # Seleccionar los registros de la tabla que cumplen las condiciones
+                        resultados_html = session.query(Resultado).filter(
+                            Resultado.dominio == dominio, Resultado.is_pdf == 2,
+                            Resultado.id_escaneo == most_recent_id_escaneo
+                            #Resultado.fecha_escaneo == most_recent_date
+                        ).all()
+
+                        html_count = len(resultados_html)
+                        print(f"Total html_coun: {html_count}")
+
+                        # Seleccionar los registros de la tabla que cumplen las condiciones
+                        resultados_others = session.query(Resultado).filter(
+                            Resultado.dominio == dominio, Resultado.is_pdf == 0,
+                            Resultado.id_escaneo == most_recent_id_escaneo
+                            #Resultado.fecha_escaneo == most_recent_date
+                        ).all()
+
+                        others_count = len(resultados_others)
+                        print(f"Total others_count: {others_count}")
+
+                        # Obtener el id_escaneo más reciente para el dominio
+                        most_recent_id_escaneo = resumen['id_escaneo']
+
+                        # Si no hay registros en el sumario para el dominio, continuar con el siguiente
+                        if most_recent_id_escaneo is not None:
+                            # Seleccionar los registros de la tabla que cumplen las condiciones
+                            resultados_errores_ortograficos = session.query(
+                                Resultado).filter(
+                                    Resultado.dominio == dominio,
+                                    Resultado.codigo_respuesta == 200,
+                                    ~func.locate('redirect=', Resultado.pagina),
+                                    Resultado.num_errores_ortograficos > 0,
+                                    Resultado.id_escaneo ==
+                                    most_recent_id_escaneo).all()
+
+                            print(
+                                f"Páginas con errores ortográficos para el dominio {dominio} en el último escaneo: {len(resultados_errores_ortograficos)}"
+                            )
+
+                            base_folder = "offline"
+                            os.makedirs(base_folder, exist_ok=True)
+
+                            for resultado in resultados_errores_ortograficos:
+                                # Descargar la página
+                                print(f"Descargando la página: {resultado.pagina}")
+                                response = requests.get(resultado.pagina)
+
+                                if response.status_code == 200:
+                                    # Parsear el HTML y buscar palabras de errores ortográficos
+                                    soup = BeautifulSoup(response.text,
+                                                        'html.parser')
+
+                                    # Obtener el texto visible de la página
+                                    texto_visible = soup.get_text()
+
+                                    # Almacenar el número de frases en resultado.frases
+                                    frases = re.split(r'[;.|,]', texto_visible)
+                                    resultado.frases = len(frases)
+
+                                    # Calcular la media de palabras por frase y almacenarla en resultado.media_palabras_frases
+                                    palabras_por_frase = [
+                                        len(frase.split()) for frase in frases
+                                        if frase.strip()
+                                    ]
+                                    media_palabras_frase = sum(
+                                        palabras_por_frase) / len(
+                                            palabras_por_frase
+                                        ) if palabras_por_frase else 0
+                                    resultado.media_palabras_frase = media_palabras_frase
+
+                                    # Calcular la prueba de legibilidad de Flesch-Kincaid y almacenarla en resultado.flesh
+                                    try:
+                                        total_palabras = len(
+                                            re.findall(r'\b\w+\b', texto_visible))
+                                        total_oraciones = resultado.frases
+                                        #total_silabas = sum([textstat.syllable(word) for word in re.findall(r'\b\w+\b', texto_visible)])
+                                        total_silabas = sum([
+                                            textstat.lexicon_count(word, True)
+                                            for word in re.findall(
+                                                r'\b\w+\b', texto_visible)
+                                        ])
+                                        flesh_score = 206.835 - 1.015 * (
+                                            total_palabras / total_oraciones
+                                        ) - 84.6 * (total_silabas / total_palabras)
+                                        resultado.flesh_score = round(
+                                            flesh_score, 2)
+                                    except ZeroDivisionError:
+                                        resultado.flesh_score = 0.0
+
+                                    modified_html = response.text
+
+                                    modified_html = str(soup).encode(
+                                        'utf-8').decode('utf-8', 'ignore')
+                                    modified_html = ' '.join(
+                                        modified_html.split()
+                                    )  # Eliminar espacios adicionales
+                                    modified_html = modified_html.replace(
+                                        '\n', '').replace('\t',
+                                                        '').replace('\r', '')
+
+                                    for palabra in resultado.errores_ortograficos:
+                                        # Encontrar la posición de la palabra en el HTML original
+                                        start_index = modified_html.find(palabra)
+
+                                        if start_index != -1:
+                                            modified_html = (
+                                                modified_html[:start_index] +
+                                                f'<span style="background-color:red!important;color:white!important;border:2px solid #fff!important">{palabra}</span>'
+                                                + modified_html[start_index +
+                                                                len(palabra):])
+
+                                    # Campos a almacenar en la instancia de Resultado
+                                    campos_html_copy = [
+                                        'html_copy', 'html_copy_dos',
+                                        'html_copy_tres', 'html_copy_cuatro',
+                                        'html_copy_cinco', 'html_copy_seis',
+                                        'html_copy_siete', 'html_copy_ocho',
+                                        'html_copy_nueve', 'html_copy_diez'
+                                    ]
+
+                                    # Inicializar campos
+                                    for campo in campos_html_copy:
+                                        setattr(resultado, campo, '')
+
+                                    # Generar la ruta del archivo
+                                    domain_folder = os.path.join(
+                                        base_folder, resultado.dominio)
+                                    os.makedirs(domain_folder, exist_ok=True)
+                                    filename = f"{resultado.id}.html"
+                                    filepath = os.path.join(
+                                        domain_folder, filename)
+
+                                    # Escribir el HTML en el archivo
+                                    with open(filepath, 'w',
+                                            encoding='utf-8') as file:
+                                        file.write(modified_html)
+
+                                    print(f"HTML guardado en: {filepath}")
+
+                        else:
+                            print(
+                                f"No hay registros en el sumario para el dominio {dominio}."
+                            )
+
+                        # Obtener el objeto Sumario existente desde la base de datos
+                        sumario_existente = session.query(Sumario).filter_by(
+                            id_escaneo=resumen['id_escaneo']).first()
+
+                        # Seleccionar los registros de la tabla que cumplen las condiciones
+                        resultados_tiempo_respuesta = session.query(
+                            Resultado
+                        ).filter(
+                            Resultado.dominio == dominio,
+                            Resultado.codigo_respuesta == 200,
+                            ~func.locate('redirect=', Resultado.pagina),
+                            Resultado.tiempo_respuesta.isnot(
+                                None
+                            ),  # Filtrar resultados con tiempo_respuesta no nulo
+                            Resultado.id_escaneo == most_recent_id_escaneo).all()
+
+                        print(
+                            f"Páginas con tiempo de respuesta para el dominio {dominio} en el último escaneo: {len(resultados_tiempo_respuesta)}"
+                        )
+
+                        # Calcular el tiempo medio de respuesta
+                        tiempo_total = sum(
+                            resultado.tiempo_respuesta
+                            for resultado in resultados_tiempo_respuesta)
+                        tiempo_medio = tiempo_total / len(
+                            resultados_tiempo_respuesta) if len(
+                                resultados_tiempo_respuesta) > 0 else 0
+
+                        # Verificar si se encontró un Sumario existente
+                        if sumario_existente:
+                            # Actualizar los campos necesarios
+                            sumario_existente.total_404 = total_404
+                            sumario_existente.tiempo_medio = tiempo_medio  # Nueva columna "tiempo_medio"
+                            sumario_existente.pdf_count = pdf_count
+                            sumario_existente.html_count = html_count
+                            sumario_existente.others_count = others_count
+                            sumario_existente.pages_err_orto = len(
+                                resultados_errores_ortograficos)
+
+                            sumario_existente.media_frases = media_frases
+                            sumario_existente.total_media_palabras_frase = total_media_palabras_frase
+                            sumario_existente.media_flesh_score = media_flesh_score
+                            sumario_existente.total_meta_description_mas_155_caracteres = total_meta_description_mas_155_caracteres
+                            sumario_existente.total_meta_description_duplicado = total_meta_description_duplicado
+                            sumario_existente.total_canonicals_falta = total_canonicals_falta
+                            sumario_existente.total_directivas_noindex = total_directivas_noindex
+                            sumario_existente.total_falta_encabezado_x_content_type_options = total_falta_encabezado_x_content_type_options
+                            sumario_existente.total_falta_encabezado_secure_referrer_policy = total_falta_encabezado_secure_referrer_policy
+                            sumario_existente.total_falta_encabezado_content_security_policy = total_falta_encabezado_content_security_policy
+                            sumario_existente.total_falta_encabezado_x_frame_options = total_falta_encabezado_x_frame_options
+                            sumario_existente.total_titulos_pagina_menos_30_caracteres = total_titulos_pagina_menos_30_caracteres
+                            sumario_existente.total_meta_description_menos_70_caracteres = total_meta_description_menos_70_caracteres
+                            sumario_existente.total_titulos_pagina_mas_60_caracteres = total_titulos_pagina_mas_60_caracteres
+                            sumario_existente.total_titulos_pagina_igual_h1 = total_titulos_pagina_igual_h1
+                            sumario_existente.total_titulos_pagina_duplicado = total_titulos_pagina_duplicado
+                            sumario_existente.total_meta_description_falta = total_meta_description_falta
+                            sumario_existente.total_h2_duplicado = total_h2_duplicado
+                            sumario_existente.total_h2_mas_70_caracteres = total_h2_mas_70_caracteres
+                            sumario_existente.total_h2_multiple = total_h2_multiple
+                            sumario_existente.total_h2_falta = total_h2_falta
+                            sumario_existente.total_h2_no_secuencial = total_h2_no_secuencial
+                        else:
+                            # Manejar el caso en que no se encontró el Sumario existente (puede imprimir un mensaje o lanzar una excepción según tus necesidades)
+                            print(
+                                f"¡No se encontró un Sumario existente para el id_escaneo {resumen['id_escaneo']}!"
+                            )
+
+                        # Confirmar los cambios en la base de datos
+                        session.commit()
+        finally:
+                eliminar_lock(session)
+                end_script_time = time.time()
+                script_duration = end_script_time - start_script_time
+
+                logging.info(
+                    f'\nDuraciÃ³n total del script: {script_duration} segundos ({script_duration // 3600} horas y {(script_duration % 3600) // 60} minutos)'
+                )
+
+                print(
+                    f'\nDuraciÃ³n total del script: {script_duration} segundos ({script_duration // 3600} horas y {(script_duration % 3600) // 60} minutos)'
+                )
+
+                generar_informe_resumen(resumen_escaneo, 'resumen_escaneo.csv')
+    else:
+        print("El script no se ejecutará debido a la existencia del archivo .lock.")
+
+
+
