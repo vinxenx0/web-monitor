@@ -1,106 +1,108 @@
-MUTUAL
-MC-MUTUAL
-cookies
-personalizables
-Home
-MUTUAL
-psicosocial
-personalizables
-sostenibilidad
-Home
-ICDQ
-Cyclops
-Midat
-MCIT
-online
-Zonnox
-VoIP
-Home
-Garum
-Murex
-Distwin
-LealtyCard
-MiGasolinera
-4GL
-facebook
-twitter
-instagram
-linkedin
-pinterest
-snapchat
-tiktok
-youtube
-whatsapp
-telegram
-reddit
-tumblr
-flickr
-vimeo
-myspace
-google+
-wechat
-wechat
-weibo
-xing
-vk
-renren
-badoo
-hi5
-orkut
-friendster
-madrid
-barcelona
-valencia
-sevilla
-zaragoza
-malaga
-murcia
-palma
-bilbao
-alicante
-cordoba
-valladolid
-vigo
-gijon
-hospitalet
-coruna
-vitoria
-granada
-elche
-oviedo
-sabadell
-santa cruz
-pamplona
-cartagena
-andalucia
-aragon
-asturias
-baleares
-canarias
-cantabria
-castilla la mancha
-castilla y leon
-cataluna
-extremadura
-galicia
-madrid
-murcia
-navarra
-pais vasco
-la rioja
-comunidad valenciana
-MUTUAL
-MC-MUTUAL
-cookies
-personalizables
-Home
-MUTUAL
-psicosocial
-personalizables
-sostenibilidad
-Home
-ICDQ
-Cyclops
-Midat
-MCIT
-online
+INSERT INTO diccionario (palabra, idioma)
+VALUES 
+('MUTUAL', 'Spanish'),
+('MC-MUTUAL', 'Spanish'),
+('cookies', 'Spanish'),
+('personalizables', 'Spanish'),
+('Home', 'Spanish'),
+('MUTUAL', 'Spanish'),
+('psicosocial', 'Spanish'),
+('personalizables', 'Spanish'),
+('sostenibilidad', 'Spanish'),
+('Home', 'Spanish'),
+('ICDQ', 'Spanish'),
+('Cyclops', 'Spanish'),
+('Midat', 'Spanish'),
+('MCIT', 'Spanish'),
+('online', 'Spanish'),
+('Zonnox', 'Spanish'),
+('VoIP', 'Spanish'),
+('Home', 'Spanish'),
+('Garum', 'Spanish'),
+('Murex', 'Spanish'),
+('Distwin', 'Spanish'),
+('LealtyCard', 'Spanish'),
+('MiGasolinera', 'Spanish'),
+('4GL', 'Spanish'),
+('facebook', 'Spanish'),
+('twitter', 'Spanish'),
+('instagram', 'Spanish'),
+('linkedin', 'Spanish'),
+('pinterest', 'Spanish'),
+('snapchat', 'Spanish'),
+('tiktok', 'Spanish'),
+('youtube', 'Spanish'),
+('whatsapp', 'Spanish'),
+('telegram', 'Spanish'),
+('reddit', 'Spanish'),
+('tumblr', 'Spanish'),
+('flickr', 'Spanish'),
+('vimeo', 'Spanish'),
+('myspace', 'Spanish'),
+('google+', 'Spanish'),
+('wechat', 'Spanish'),
+('wechat', 'Spanish'),
+('weibo', 'Spanish'),
+('xing', 'Spanish'),
+('vk', 'Spanish'),
+('renren', 'Spanish'),
+('badoo', 'Spanish'),
+('hi5', 'Spanish'),
+('orkut', 'Spanish'),
+('friendster', 'Spanish'),
+('madrid', 'Spanish'),
+('barcelona', 'Spanish'),
+('valencia', 'Spanish'),
+('sevilla', 'Spanish'),
+('zaragoza', 'Spanish'),
+('malaga', 'Spanish'),
+('murcia', 'Spanish'),
+('palma', 'Spanish'),
+('bilbao', 'Spanish'),
+('alicante', 'Spanish'),
+('cordoba', 'Spanish'),
+('valladolid', 'Spanish'),
+('vigo', 'Spanish'),
+('gijon', 'Spanish'),
+('hospitalet', 'Spanish'),
+('coruna', 'Spanish'),
+('vitoria', 'Spanish'),
+('granada', 'Spanish'),
+('elche', 'Spanish'),
+('oviedo', 'Spanish'),
+('sabadell', 'Spanish'),
+('santa cruz', 'Spanish'),
+('pamplona', 'Spanish'),
+('cartagena', 'Spanish'),
+('andalucia', 'Spanish'),
+('aragon', 'Spanish'),
+('asturias', 'Spanish'),
+('baleares', 'Spanish'),
+('canarias', 'Spanish'),
+('cantabria', 'Spanish'),
+('castilla la mancha', 'Spanish'),
+('castilla y leon', 'Spanish'),
+('cataluna', 'Spanish'),
+('extremadura', 'Spanish'),
+('galicia', 'Spanish'),
+('madrid', 'Spanish'),
+('murcia', 'Spanish'),
+('navarra', 'Spanish'),
+('pais vasco', 'Spanish'),
+('la rioja', 'Spanish'),
+('comunidad valenciana', 'Spanish'),
+('MUTUAL', 'Spanish'),
+('MC-MUTUAL', 'Spanish'),
+('cookies', 'Spanish'),
+('personalizables', 'Spanish'),
+('Home', 'Spanish'),
+('MUTUAL', 'Spanish'),
+('psicosocial', 'Spanish'),
+('personalizables', 'Spanish'),
+('sostenibilidad', 'Spanish'),
+('Home', 'Spanish'),
+('ICDQ', 'Spanish'),
+('Cyclops', 'Spanish'),
+('Midat', 'Spanish'),
+('MCIT', 'Spanish'),
+('online', 'Spanish');

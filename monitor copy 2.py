@@ -1357,18 +1357,18 @@ def generar_informe_resumen(resumen, nombre_archivo):
 
         for dominio, datos in resumen.items():
             #print(f'Dominio: {dominio}, Datos: {datos}')
-            total_404 =  0
+            total_404 = 0
             paginas_inseguras = 0
-            total_enlaces_inseguros =  0
+            total_enlaces_inseguros = 0
             pages_title_long = 0
-            pages_title_short =  0
+            pages_title_short = 0
             pages_title_dup = 0
-            pages_desc_long =  0
-            pages_desc_short =  0
-            html_valid_count =  0
-            content_valid_count =  0
-            responsive_valid_count =  0
-            valid_aaaa_pages =  0 # Contador para pÃ¡ginas con 'valid_aaa' True
+            pages_desc_long = 0
+            pages_desc_short = 0
+            html_valid_count = 0
+            content_valid_count = 0
+            responsive_valid_count = 0
+            valid_aaaa_pages = 0  # Contador para pÃ¡ginas con 'valid_aaa' True
             codigos_respuesta = datos['codigos_respuesta']
             total_paginas = datos['total_paginas']
             duracion_total = datos['duracion_total']
@@ -1381,9 +1381,9 @@ def generar_informe_resumen(resumen, nombre_archivo):
             pages_err_orto = 0
             pages_alt_vacias = 0
             peso_total_paginas = 0
-            pdf_count =  0
-            html_count =  0
-            others_count =  0
+            pdf_count = 0
+            html_count = 0
+            others_count = 0
 
             #for pagina in datos.get('paginas', []):
             #print(resultados_dominio)
@@ -1425,14 +1425,20 @@ def generar_informe_resumen(resumen, nombre_archivo):
                     False))  # Incrementa el contador si 'valid_aaa' es True
                 #print(resultados_dominio)
 
-            pages_title_long = sum(1 if pagina.get('title_long') else 0 for pagina in resultados_dominio)
-            pages_title_short = sum(1 if pagina.get('title_short') else 0 for pagina in resultados_dominio)
-            pages_title_dup = sum(1 if pagina.get('title_duplicate') else 0 for pagina in resultados_dominio)
-            pages_desc_long = sum(1 if pagina.get('desc_long') else 0 for pagina in resultados_dominio)
-            pages_desc_short = sum(1 if pagina.get('desc_short') else 0 for pagina in resultados_dominio)
-            pages_h1_dup = sum(1 if pagina.get('h1_duplicate') else 0 for pagina in resultados_dominio)
-            pages_img_1mb = sum(1 if pagina.get('images_1MB') else 0 for pagina in resultados_dominio)
-
+            pages_title_long = sum(1 for pagina in resultados_dominio
+                                   if pagina.get('title_long'))
+            pages_title_short = sum(1 for pagina in resultados_dominio
+                                    if pagina.get('title_short'))
+            pages_title_dup = sum(1 for pagina in resultados_dominio
+                                  if pagina.get('title_duplicate'))
+            pages_desc_long = sum(1 for pagina in resultados_dominio
+                                  if pagina.get('desc_long'))
+            pages_desc_short = sum(1 for pagina in resultados_dominio
+                                   if pagina.get('desc_short'))
+            pages_h1_dup = sum(1 for pagina in resultados_dominio
+                               if pagina.get('h1_duplicate'))
+            pages_img_1mb = sum(1 for pagina in resultados_dominio
+                                if pagina.get('images_1MB'))
 
             # Convert Counter to dictionary before writing to CSV
             idiomas_encontrados_dict = dict(idiomas_encontrados)
@@ -1797,12 +1803,7 @@ if __name__ == "__main__":
                         'total_h2_falta':
                         0,
                         'total_h2_no_secuencial':
-                        0,
-                        'pages_title_long' : 0,
-                        'pages_title_short' :  0,
-                        'pages_title_dup' : 0,
-                        'pages_desc_long' :  0,
-                        'pages_desc_short' :  0,
+                        0
                     }
 
                     guardar_en_csv_y_json(resultados_dominio,
@@ -1841,14 +1842,6 @@ if __name__ == "__main__":
                         # Si no hay registros para el dominio, continuar con el siguiente
                         if most_recent_date is None:
                             continue
-
-                        pages_title_long = sum(1 if pagina.get('title_long') else 0 for pagina in resultados_dominio)
-                        pages_title_short = sum(1 if pagina.get('title_short') else 0 for pagina in resultados_dominio)
-                        pages_title_dup = sum(1 if pagina.get('title_duplicate') else 0 for pagina in resultados_dominio)
-                        pages_desc_long = sum(1 if pagina.get('desc_long') else 0 for pagina in resultados_dominio)
-                        pages_desc_short = sum(1 if pagina.get('desc_short') else 0 for pagina in resultados_dominio)
-                        pages_h1_dup = sum(1 if pagina.get('h1_duplicate') else 0 for pagina in resultados_dominio)
-                        pages_img_1mb = sum(1 if pagina.get('images_1MB') else 0 for pagina in resultados_dominio)
 
                         suma_media_frases = session.query(
                             func.sum(Resultado.frases)).filter(
@@ -2419,11 +2412,6 @@ if __name__ == "__main__":
                             sumario_existente.total_h2_multiple = total_h2_multiple
                             sumario_existente.total_h2_falta = total_h2_falta
                             sumario_existente.total_h2_no_secuencial = total_h2_no_secuencial
-                            sumario_existente.pages_title_long = pages_title_long
-                            sumario_existente.pages_desc_short = pages_title_short
-                            sumario_existente.pages_title_dup = pages_title_dup 
-                            sumario_existente.pages_desc_long = pages_desc_long
-                            sumario_existente.pages_desc_short = pages_desc_short 
                         else:
                             # Manejar el caso en que no se encontró el Sumario existente (puede imprimir un mensaje o lanzar una excepción según tus necesidades)
                             print(
