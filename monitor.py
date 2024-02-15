@@ -17,7 +17,6 @@ import string
 from PIL import Image
 from io import BytesIO
 import os
-import json
 import imghdr
 import subprocess
 from collections import Counter
@@ -26,12 +25,12 @@ from urllib.parse import urlparse, urljoin
 import aspell
 import string
 import langid
-from sqlalchemy import Boolean, func, create_engine, Column, Integer, String, Text, DateTime, JSON, desc, update, Float
+from sqlalchemy import Boolean, func, create_engine, Column, Integer, String, Text, DateTime, JSON, Float
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
-from sqlalchemy.exc import IntegrityError, OperationalError
-from sqlalchemy import LargeBinary
+from sqlalchemy.exc import OperationalError
 import secrets
+import re
 import logging
 #from langdetect import detect
 
@@ -287,7 +286,7 @@ def extraer_texto_visible(response_text):
     return visible_text
 
 
-import re
+
 
 def obtener_idioma_desde_url(url):
     try:
