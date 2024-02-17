@@ -1,0 +1,16 @@
+
+[Unit]
+Description=Web Monitor Frontend
+After=network.target
+
+[Service]
+ExecStart=/opt/frontend-monitor/.venv/bin/python3 /opt/frontend-monitor/.venv/bin/flask --app run run --host=0.0.0.0 --cert=/opt/frontend-monitor/.ssl/cert.pem --key=/opt/frontend-monitor/.ssl/privkey.pem --debug
+WorkingDirectory=/opt/frontend-monitor/
+Restart=always
+User=vicente
+Group=vicente
+Environment=PATH=/opt/frontend-monitor/.venv/bin/python3:/opt/frontend-monitor/.venv/bin:/usr/bin/python3:/usr/local/bin:/usr/bin:/bin
+
+[Install]
+WantedBy=multi-user.target
+
