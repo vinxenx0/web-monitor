@@ -1,13 +1,49 @@
 # /config.py
+# /config.py
 
-DOMINIOS_ESPECIFICOS = [""]
+DOMINIOS_ESPECIFICOS = ["http://zonnox.net/"] #,"http://circuitosaljarafe.com","http://hispalis.net","https://www.955170000.com"]
 
-USER = 'x'
-PWD = 'x'
-HOST = 'x'
-DB = 'x'
+# ["http://zonnox.net"] #["https://www.mc-mutual.com","https://mejoratuabsentismo.mc-mutual.com"] #] ["http://zonnox.net"] # ["https://4glsp.com"] # 
 
-PATRONES_EXCLUSION = [] #,'tel:' #,"/asset_publisher/","/documents/", "/estaticos/", "productos","tel:"] #,"/asset_publisher/"
-    
+USER = 'vicente'
+PWD = 'vblp2267'
+HOST = '81.19.160.18'
+DB = 'mc_mutual_latest'
 
-EXTENSIONES_EXCLUIDAS =[]#  [".apk", ".mp4",".avi",".msi",".zip",".7z",".rar",".mpeg",".zip/",".mp3"]  # Add the file extensions you want to exclude
+PATRONES_EXCLUSION = ['#','tel:','/openid/','visor?','visor','maximiced','redirect=','redirect','categoryId', #'?','=','update_language',
+'/tu_perfil/empresas/gestion_absentismo',
+'/tu_perfil/empresas/prevencion_riesgos_laborales/',
+'/solicitud-volante-asistencial',
+'/contenidos/opencms/modulesdemo/',
+'/contenidos/opencms/release/',
+'/contenidos/opencms/webprivada/',
+'/contenidos/opencms/alkacon-documentation/',
+'/contenidos/opencms/No_indexar/',
+'/contenidos/opencms/demo_de/',       
+'/contenidos/opencms/demo_en/',
+'/contenidos/opencms/demopages/',
+'/contenidos/opencms/plantillaCarpetas/',
+'/contenidos/opencms/common/',
+'/contenidos/opencms/extranet/',
+'/contenidos/opencms/webpublica/boletin/',
+'/group/mc-mutual/',
+'/es/group/mc-mutual/',
+'/ca/group/mc-mutual/',
+'/pcoWeb/',
+'/documents/20143/1080189/',
+'/EnqRiesgosPsicosociales'
+'/evaluacion-riesgos-psicosociales',
+"/asset_publisher/","/documents/", "/estaticos/", "productos","tel:"] 
+
+EXTENSIONES_EXCLUIDAS =[".svg"]#  [".apk", ".mp4",".avi",".msi",".zip",".7z",".rar",".mpeg",".zip/",".mp3"]  # Add the file extensions you want to exclude
+
+
+PALABRAS_DICCIONARIO = []
+
+
+# frecuencia de lanzamiento
+# locked ?
+# archivo de logs
+# archivo de resultados offline
+# archivo de resultados csv
+

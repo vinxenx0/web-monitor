@@ -899,10 +899,11 @@ def ejecutar_pa11y(url_actual):
         #command = f"pa11y --standard WCAG2AA  --reporter csv {url_actual}"
         #print("url p4lly:")
         #print(url_actual)
-        command = f"pa11y -T 1 --ignore issue-code-2 -r json {url_actual}"
+        #command = f"pa11y -e axe -d -T 3 --ignore issue-code-2 --ignore issue-code-1 -r json {url_actual}"
+        command = f"pa11y -T 1 --ignore issue-code-2 --ignore issue-code-1 -r json {url_actual}"
         process = subprocess.run(command,
                                  shell=True,
-                                 check=True,
+                                 check=False,
                                  stdout=subprocess.PIPE,
                                  stderr=subprocess.PIPE,
                                  text=True)
