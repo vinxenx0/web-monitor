@@ -306,8 +306,8 @@ def obtener_idioma_desde_url(url):
             if idioma_meta:
                 # Elimina las comillas escapadas usando expresiones regulares
                 codigo_idioma = re.sub(r'^\\"|\\"$', '', idioma_meta).split('_')[0]
-                print("idioma:")
-                print(codigo_idioma)
+                #print("idioma:")
+                #print(codigo_idioma)
                 return codigo_idioma
             else:
                 print("No se encontró el atributo content en la etiqueta meta con property='og:locale'.")
@@ -321,8 +321,8 @@ def obtener_idioma_desde_url(url):
             if idioma_html:
                 # Elimina las comillas escapadas usando expresiones regulares
                 codigo_idioma = re.sub(r'^\\"|\\"$', '', idioma_html).split('-')[0]
-                print("idioma:")
-                print(codigo_idioma)
+                #print("idioma:")
+                #print(codigo_idioma)
                 return codigo_idioma
             else:
                 print("No se encontró el atributo lang en la etiqueta <html>.")
@@ -336,9 +336,6 @@ def obtener_idioma_desde_url(url):
 
     except Exception as e:
         print(f"Error al obtener el idioma del HTML de la URL {url}: {e}")
-
-    return "es"  # Idioma predeterminado
-
 
     return "es"  # Idioma predeterminado
 
@@ -369,44 +366,6 @@ def analizar_ortografia(url, texto,
             '', '', string.digits + string.punctuation + '¡!¿?')
         texto_limpio = texto.translate(translator)
 
-        #palabras_excluidas = {
-        #    'MUTUAL', 'MC-MUTUAL', 'cookies', 'personalizables', 'Home',
-        #    'MUTUAL', 'psicosocial', 'personalizables', 'sostenibilidad',
-        #    'Home', 'ICDQ', 'Cyclops', 'Midat', 'MCIT', 'online'
-        #}
-        #palabras_excluidas.update({
-        #    'Zonnox', 'VoIP', 'Home', 'Garum', 'Murex', 'Distwin',
-        #    'LealtyCard', 'MiGasolinera', '4GL'
-        #})
-        #redes_sociales = {
-        #    'facebook', 'twitter', 'instagram', 'linkedin', 'pinterest',
-        #    'snapchat', 'tiktok', 'youtube', 'whatsapp', 'telegram',
-        #    'reddit', 'tumblr', 'flickr', 'vimeo', 'myspace', 'google+',
-        #    'wechat', 'wechat', 'weibo', 'xing', 'vk', 'renren', 'badoo',
-        #    'hi5', 'orkut', 'friendster'
-        #}
-
-        #provincias_espanolas = {
-        #    'madrid', 'barcelona', 'valencia', 'sevilla', 'zaragoza',
-        #    'malaga', 'murcia', 'palma', 'bilbao', 'alicante', 'cordoba',
-        #    'valladolid', 'vigo', 'gijon', 'hospitalet', 'coruna',
-        #    'vitoria', 'granada', 'elche', 'oviedo', 'sabadell',
-        #    'santa cruz', 'pamplona', 'cartagena'
-        #}
-
-        #comunidades_autonomas_espanolas = {
-        #    'andalucia', 'aragon', 'asturias', 'baleares', 'canarias',
-        #    'cantabria', 'castilla la mancha', 'castilla y leon',
-        #    'cataluna', 'extremadura', 'galicia', 'madrid', 'murcia',
-        #    'navarra', 'pais vasco', 'la rioja', 'comunidad valenciana',
-        #    'MUTUAL', 'MC-MUTUAL', 'cookies', 'personalizables', 'Home',
-        #    'MUTUAL', 'psicosocial', 'personalizables', 'sostenibilidad',
-        #    'Home', 'ICDQ', 'Cyclops', 'Midat', 'MCIT', 'online'
-        #}
-
-        #palabras_excluidas.update(redes_sociales)
-        #palabras_excluidas.update(provincias_espanolas)
-        #palabras_excluidas.update(comunidades_autonomas_espanolas)
 
         #print(PALABRAS_DICCIONARIO)
         # Agrega palabras personalizadas excluidas
@@ -940,7 +899,7 @@ def ejecutar_pa11y(url_actual):
         #command = f"pa11y --standard WCAG2AA  --reporter csv {url_actual}"
         #print("url p4lly:")
         #print(url_actual)
-        command = f"pa11y -T 1 --ignore issue-code-2 -r csv {url_actual}"
+        command = f"pa11y -T 1 --ignore issue-code-2 -r json {url_actual}"
         process = subprocess.run(command,
                                  shell=True,
                                  check=True,
@@ -981,7 +940,9 @@ def ejecutar_pa11y(url_actual):
                 })
 
         # Verifica si el resultado de pa11y contiene datos
-        return pa11y_results_list
+        # return pa11y_results_list
+        return process.stdout
+    
     except Exception as e:  # subprocess.CalledProcessError as e:
         error_message = f"Error al ejecutar pa11y para {url_actual}: {e}"
         print(error_message)
@@ -1065,7 +1026,7 @@ def escanear_dominio(url_dominio, exclusiones=[], extensiones_excluidas=[]):
                             'text'):
                         if es_html_valido(response.text):
 
-                            print(f"Escanenado: {url_actual}")
+                            print(f"Escaneando: {url_actual}")
 
                             resultados_pagina[
                                 'enlaces_totales'] = 0  # Inicializar en 0
@@ -2447,6 +2408,3 @@ if __name__ == "__main__":
                 generar_informe_resumen(resumen_escaneo, 'resumen_escaneo.csv')
     else:
         print("El script no se ejecutará debido a la existencia del archivo .lock.")
-
-
-

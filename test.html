@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Spider Web Panel de Control</title>
+    <!-- Bootstrap CSS -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/twitter-bootstrap/5.3.0/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body>
+    <div class="container mt-5">
+        <h1 class="mb-4">Panel de Control del Spider Web</h1>
+
+        <div class="row">
+            <div class="col-lg-6">
+                <div class="card mb-3">
+                    <div class="card-body">
+                        <h5 class="card-title">Configuración de Frecuencia</h5>
+                        <form>
+                            <div class="mb-3">
+                                <label class="form-check-label">
+                                    <input class="form-check-input" type="radio" name="frecuencia" value="1dia"> 1 Día
+                                </label>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-check-label">
+                                    <input class="form-check-input" type="radio" name="frecuencia" value="3dias"> 3 Días
+                                </label>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-check-label">
+                                    <input class="form-check-input" type="radio" name="frecuencia" value="5dias"> 5 Días
+                                </label>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-check-label">
+                                    <input class="form-check-input" type="radio" name="frecuencia" value="9dias"> 9 Días
+                                </label>
+                            </div>
+                            <div class="mb-3">
+                                <label for="urlExcluidas" class="form-label">URLs Excluidas</label>
+                                <textarea class="form-control" id="urlExcluidas" rows="3"></textarea>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-lg-6">
+                <div class="card mb-3">
+                    <div class="card-body">
+                        <h5 class="card-title">Configuración Adicional</h5>
+                        <div class="mb-3">
+                            <label for="extensionesExcluidas" class="form-label">Extensiones Excluidas</label>
+                            <textarea class="form-control" id="extensionesExcluidas" rows="3"></textarea>
+                        </div>
+                        <div class="mb-3">
+                            <label for="keywords" class="form-label">Palabras Clave</label>
+                            <textarea class="form-control" id="keywords" rows="3"></textarea>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+    </div>
+
+    <!-- Bootstrap Bundle with Popper -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
