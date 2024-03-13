@@ -7,6 +7,7 @@
 
 import csv
 import re
+import json
 import textstat
 import requests
 from bs4 import BeautifulSoup
@@ -144,6 +145,13 @@ class Diccionario(Base):
     palabra = Column(String(255))
     idioma = Column(String(50))
 
+class Diccionario_usuario(Base):
+    __tablename__ = 'diccionario_usuario'
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    palabra = Column(String(255))
+    idioma = Column(String(50))
+
+
 class Configuracion(Base):
     __tablename__ = 'configuracion'
     id = Column(Integer, primary_key=True)
@@ -280,11 +288,12 @@ def guardar_en_sumario(session, sumario):
         session.flush()
 
 
+
 def extraer_texto_visible(response_text):
     soup = BeautifulSoup(response_text, 'html.parser')
+    #soup = BeautifulSoup(response_text, 'html.parser', markup_type='html')
     visible_text = ' '.join(soup.stripped_strings)
     return visible_text
-
 
 
 
@@ -352,7 +361,7 @@ def detectar_idioma(texto):
 
 def analizar_ortografia(url, texto,
                         idiomas=[
-                            'es', 'fr', 'en', 'ca', 'ca_general', 'ca_valencia'
+                            'es', 'fr', 'en', 'ca', 'eu', 'ca_general', 'ca_valencia'
                         ]):
     errores_ortograficos = None  # Inicializa como None en lugar de una lista vacía
     palabras = set()  # Usamos un conjunto para almacenar las palabras únicas
@@ -363,30 +372,32 @@ def analizar_ortografia(url, texto,
 
         # Eliminar números y símbolos de moneda, así como exclamaciones, interrogaciones y caracteres similares
         translator = str.maketrans(
-            '', '', string.digits + string.punctuation + '¡!¿?')
+            '', '', string.digits + string.punctuation + '¡!¿?“”»«¡!¿?$€£@#%^&*()_-+=[]{}|;:,.<>/–“"')
         texto_limpio = texto.translate(translator)
 
-
+        #print("revisando pagina ortografia")
         #print(PALABRAS_DICCIONARIO)
         # Agrega palabras personalizadas excluidas
+        #palabras = {
+        #    palabra
+        #    for palabra in texto_limpio.split()
+        #    if palabra.lower() not in PALABRAS_DICCIONARIO
+        #    and len(palabra) >= 4
+        #}
+
+        # Filtra palabras que tengan TODOS los signos de puntuación, interrogación, exclamación, caracteres especiales o símbolos de moneda
+        caracteres_especiales = string.punctuation + '“”»«¡!¿?$€£@#%^&*()_-+=[]{}|;:,.<>/–“"'
         palabras = {
             palabra
             for palabra in texto_limpio.split()
-            if palabra.lower() not in PALABRAS_DICCIONARIO
-            and len(palabra) >= 4
-        }
-
-        # Filtra palabras que tengan TODOS los signos de puntuación, interrogación, exclamación, caracteres especiales o símbolos de moneda
-        caracteres_especiales = string.punctuation + '¡!¿?$€£@#%^&*()_-+=[]{}|;:,.<>/"'
-        palabras = {
-            palabra
-            for palabra in palabras
             if not all(c in caracteres_especiales for c in palabra)
+            if palabra not in PALABRAS_DICCIONARIO
+            and len(palabra) >= 4
         }
 
         # Errores ortográficos solo para palabras que no están en la lista excluida y no cumplen con el chequeo del speller
         errores_ortograficos = [
-            palabra for palabra in palabras if not speller.check(palabra)
+            palabra for palabra in palabras if not speller.check(palabra) and palabra.lower() not in PALABRAS_DICCIONARIO and palabra.upper() not in PALABRAS_DICCIONARIO and palabra.capitalize() not in PALABRAS_DICCIONARIO
         ]
 
     except Exception as e:
@@ -971,7 +982,7 @@ def escanear_dominio(url_dominio, exclusiones=[], extensiones_excluidas=[]):
             continue
 
         try:
-            response = requests.get(url_actual, timeout=180)
+            response = requests.get(url_actual) #, timeout=180)
             tiempo_respuesta = response.elapsed.total_seconds()
             codigo_respuesta = response.status_code
             # Obtener el tipo de documento (Content-Type)
@@ -1585,10 +1596,7 @@ if __name__ == "__main__":
 
     start_script_time = time.time()
 
-    urls_a_escanear = DOMINIOS_ESPECIFICOS
-    patrones_exclusion = PATRONES_EXCLUSION
-    extensiones_excluidas = EXTENSIONES_EXCLUIDAS
-
+  
     #engine = create_engine("mysql+mysqlconnector://usuario:contraseña@localhost/db?connect_timeout=300")
     engine = create_engine(
         'mysql+mysqlconnector://' + USER + ':' + PWD + '@' + HOST + '/' + DB,
@@ -1602,6 +1610,38 @@ if __name__ == "__main__":
 
     # InicializaciÃ³n de la sesiÃ³n de SQLAlchemy
     Session = sessionmaker(bind=engine)
+    session = Session()
+
+    #carga las configuraciones
+
+    urls_a_escanear = DOMINIOS_ESPECIFICOS
+    patrones_exclusion = PATRONES_EXCLUSION
+    extensiones_excluidas = EXTENSIONES_EXCLUIDAS
+
+
+
+    #print("palabras diccionario de la base de datos dos diccionarios USUARIO")
+    palabras_a_revisar = [palabra.palabra for palabra in session.query(Diccionario_usuario).all()]
+    #print(palabras_a_revisar)
+    #print("palabras diccionario de la base de datos dos diccionarios NORMALES")
+    palabras_a_revisar.extend([palabra.palabra for palabra in session.query(Diccionario).all()])
+    #print(palabras_a_revisar)
+    session.close()
+
+    #lista_palabras = json.dumps(palabras_a_revisar)
+    
+    palabras_limpias = []
+    for palabra in palabras_a_revisar:
+        # Remover caracteres no deseados como retornos de carro, espacios, tabuladores, etc.
+        palabra_limpia = palabra.replace('\n', '').replace('\t', '').strip()
+        palabras_limpias.append(palabra_limpia)
+
+    PALABRAS_DICCIONARIO = palabras_a_revisar
+
+    #print("palabras diccionario de la base de datos dos diccionarios")
+    #print(PALABRAS_DICCIONARIO)
+
+    Session = sessionmaker(bind=engine)
 
     session = Session()
 
@@ -1611,9 +1651,9 @@ if __name__ == "__main__":
             resumen_escaneo = {}
 
             # Extraer todas las palabras de la columna "palabra" de la tabla "diccionario"
-            PALABRAS_DICCIONARIO = [
-                row.palabra for row in session.query(Diccionario).all()
-            ]
+            #PALABRAS_DICCIONARIO = [
+            #    row.palabra for row in session.query(Diccionario).all()
+            #]
             #print(PALABRAS_DICCIONARIO)
 
             for url in urls_a_escanear:
@@ -2277,14 +2317,31 @@ if __name__ == "__main__":
 
                                     for palabra in resultado.errores_ortograficos:
                                         # Encontrar la posición de la palabra en el HTML original
-                                        start_index = modified_html.find(palabra)
+                                        #start_index = modified_html.find(palabra)
 
-                                        if start_index != -1:
-                                            modified_html = (
+                                        #if start_index != -1:
+                                        #    modified_html = (
+                                        #        modified_html[:start_index] +
+                                        #        f'<span style="background-color:red!important;color:white!important;border:2px solid #fff!important">{palabra}</span>'
+                                        #        + modified_html[start_index +
+                                        #                        len(palabra):])
+
+                                        # Buscar la etiqueta <body> en el HTML
+                                        start_body_index = modified_html.find('<body>')
+        
+                                        # Si no encuentra la etiqueta <body>, buscar en todo el documento
+                                        if start_body_index == -1:
+                                            start_index = modified_html.find(palabra)
+                                        else:
+                                            # Encontrar la posición de la palabra en el HTML original después de la etiqueta <body>
+                                            start_index = modified_html.find(palabra, start_body_index)
+        
+                                            if start_index != -1:
+                                                modified_html = (
                                                 modified_html[:start_index] +
                                                 f'<span style="background-color:red!important;color:white!important;border:2px solid #fff!important">{palabra}</span>'
                                                 + modified_html[start_index +
-                                                                len(palabra):])
+                                                len(palabra):])
 
                                     # Campos a almacenar en la instancia de Resultado
                                     campos_html_copy = [

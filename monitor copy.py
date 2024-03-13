@@ -7,6 +7,7 @@
 
 import csv
 import re
+import json
 import textstat
 import requests
 from bs4 import BeautifulSoup
@@ -17,7 +18,6 @@ import string
 from PIL import Image
 from io import BytesIO
 import os
-import json
 import imghdr
 import subprocess
 from collections import Counter
@@ -26,12 +26,12 @@ from urllib.parse import urlparse, urljoin
 import aspell
 import string
 import langid
-from sqlalchemy import Boolean, func, create_engine, Column, Integer, String, Text, DateTime, JSON, desc, update, Float
+from sqlalchemy import Boolean, func, create_engine, Column, Integer, String, Text, DateTime, JSON, Float
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
-from sqlalchemy.exc import IntegrityError, OperationalError
-from sqlalchemy import LargeBinary
+from sqlalchemy.exc import OperationalError
 import secrets
+import re
 import logging
 #from langdetect import detect
 
@@ -144,6 +144,13 @@ class Diccionario(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     palabra = Column(String(255))
     idioma = Column(String(50))
+
+class Diccionario_usuario(Base):
+    __tablename__ = 'diccionario_usuario'
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    palabra = Column(String(255))
+    idioma = Column(String(50))
+
 
 class Configuracion(Base):
     __tablename__ = 'configuracion'
@@ -287,31 +294,59 @@ def extraer_texto_visible(response_text):
     return visible_text
 
 
+
+
 def obtener_idioma_desde_url(url):
     try:
         # Realiza la solicitud GET para obtener el contenido HTML de la URL
         response = requests.get(url)
-        response.raise_for_status(
-        )  # Lanza una excepción si la solicitud no tiene éxito
+        response.raise_for_status()  # Lanza una excepción si la solicitud no tiene éxito
 
         # Parsea el HTML
         soup = BeautifulSoup(response.text, 'html.parser')
 
-        # Encuentra la etiqueta <html> y extrae el valor del atributo lang
-        idioma_html = soup.html.get('lang', None)
+        # Encuentra la etiqueta meta con el atributo property="og:locale"
+        etiqueta_meta = soup.find('meta', property='og:locale')
 
-        # Si se encuentra el atributo lang, extrae los dos primeros caracteres (código del idioma)
-        if idioma_html:
-            codigo_idioma = idioma_html.split('-')[0]
-            print("idioma:")
-            print(codigo_idioma)
-            return codigo_idioma
+        # Si se encuentra la etiqueta meta, extrae el valor del atributo content
+        if etiqueta_meta:
+            idioma_meta = etiqueta_meta.get('content', None)
+            if idioma_meta:
+                # Elimina las comillas escapadas usando expresiones regulares
+                codigo_idioma = re.sub(r'^\\"|\\"$', '', idioma_meta).split('_')[0]
+                #print("idioma:")
+                #print(codigo_idioma)
+                return codigo_idioma
+            else:
+                print("No se encontró el atributo content en la etiqueta meta con property='og:locale'.")
         else:
-            print("No se encontró el atributo lang en la etiqueta <html>.")
-            return "es"
+            print("No se encontró la etiqueta meta con property='og:locale'.")
+
+            # Encuentra la etiqueta <html> y extrae el valor del atributo lang
+            idioma_html = soup.html.get('lang', None)
+
+            # Si se encuentra el atributo lang, extrae los dos primeros caracteres (código del idioma)
+            if idioma_html:
+                # Elimina las comillas escapadas usando expresiones regulares
+                codigo_idioma = re.sub(r'^\\"|\\"$', '', idioma_html).split('-')[0]
+                #print("idioma:")
+                #print(codigo_idioma)
+                return codigo_idioma
+            else:
+                print("No se encontró el atributo lang en la etiqueta <html>.")
+
+                # Si no se encuentra el idioma en ninguna de las etiquetas, utiliza la función detectar_idioma
+                texto_pagina = soup.get_text()
+                codigo_idioma_detectado = detectar_idioma(texto_pagina)
+                if codigo_idioma_detectado:
+                    print("Idioma detectado mediante texto de la página:", codigo_idioma_detectado)
+                    return codigo_idioma_detectado
+
     except Exception as e:
         print(f"Error al obtener el idioma del HTML de la URL {url}: {e}")
-        return "es"
+
+    return "es"  # Idioma predeterminado
+
 
 
 def detectar_idioma(texto):
@@ -323,86 +358,49 @@ def detectar_idioma(texto):
         return None
 
 
-def analizar_ortografia(texto,
+def analizar_ortografia(url, texto,
                         idiomas=[
-                            'es', 'fr', 'en', 'ca', 'ca_general', 'ca_valencia'
+                            'es', 'fr', 'en', 'ca', 'eu', 'ca_general', 'ca_valencia'
                         ]):
     errores_ortograficos = None  # Inicializa como None en lugar de una lista vacía
     palabras = set()  # Usamos un conjunto para almacenar las palabras únicas
 
-    idioma_detectado = obtener_idioma_desde_url(texto)  #detectar_idioma(texto)
-    if idioma_detectado and idioma_detectado in idiomas:
-        try:
-            speller = aspell.Speller('lang', idioma_detectado)
+    idioma_detectado = obtener_idioma_desde_url(url)  #detectar_idioma(texto)
+    try:
+        speller = aspell.Speller('lang', idioma_detectado)
 
-            # Eliminar números y símbolos de moneda, así como exclamaciones, interrogaciones y caracteres similares
-            translator = str.maketrans(
-                '', '', string.digits + string.punctuation + '¡!¿?')
-            texto_limpio = texto.translate(translator)
+        # Eliminar números y símbolos de moneda, así como exclamaciones, interrogaciones y caracteres similares
+        translator = str.maketrans(
+            '', '', string.digits + string.punctuation + '¡!¿?“”»«¡!¿?$€£@#%^&*()_-+=[]{}|;:,.<>/–“"')
+        texto_limpio = texto.translate(translator)
 
-            #palabras_excluidas = {
-            #    'MUTUAL', 'MC-MUTUAL', 'cookies', 'personalizables', 'Home',
-            #    'MUTUAL', 'psicosocial', 'personalizables', 'sostenibilidad',
-            #    'Home', 'ICDQ', 'Cyclops', 'Midat', 'MCIT', 'online'
-            #}
-            #palabras_excluidas.update({
-            #    'Zonnox', 'VoIP', 'Home', 'Garum', 'Murex', 'Distwin',
-            #    'LealtyCard', 'MiGasolinera', '4GL'
-            #})
-            #redes_sociales = {
-            #    'facebook', 'twitter', 'instagram', 'linkedin', 'pinterest',
-            #    'snapchat', 'tiktok', 'youtube', 'whatsapp', 'telegram',
-            #    'reddit', 'tumblr', 'flickr', 'vimeo', 'myspace', 'google+',
-            #    'wechat', 'wechat', 'weibo', 'xing', 'vk', 'renren', 'badoo',
-            #    'hi5', 'orkut', 'friendster'
-            #}
+        #print("revisando pagina ortografia")
+        #print(PALABRAS_DICCIONARIO)
+        # Agrega palabras personalizadas excluidas
+        #palabras = {
+        #    palabra
+        #    for palabra in texto_limpio.split()
+        #    if palabra.lower() not in PALABRAS_DICCIONARIO
+        #    and len(palabra) >= 4
+        #}
 
-            #provincias_espanolas = {
-            #    'madrid', 'barcelona', 'valencia', 'sevilla', 'zaragoza',
-            #    'malaga', 'murcia', 'palma', 'bilbao', 'alicante', 'cordoba',
-            #    'valladolid', 'vigo', 'gijon', 'hospitalet', 'coruna',
-            #    'vitoria', 'granada', 'elche', 'oviedo', 'sabadell',
-            #    'santa cruz', 'pamplona', 'cartagena'
-            #}
+        # Filtra palabras que tengan TODOS los signos de puntuación, interrogación, exclamación, caracteres especiales o símbolos de moneda
+        caracteres_especiales = string.punctuation + '“”»«¡!¿?$€£@#%^&*()_-+=[]{}|;:,.<>/–“"'
+        palabras = {
+            palabra
+            for palabra in texto_limpio.split()
+            if not all(c in caracteres_especiales for c in palabra)
+            if palabra not in PALABRAS_DICCIONARIO
+            and len(palabra) >= 4
+        }
 
-            #comunidades_autonomas_espanolas = {
-            #    'andalucia', 'aragon', 'asturias', 'baleares', 'canarias',
-            #    'cantabria', 'castilla la mancha', 'castilla y leon',
-            #    'cataluna', 'extremadura', 'galicia', 'madrid', 'murcia',
-            #    'navarra', 'pais vasco', 'la rioja', 'comunidad valenciana',
-            #    'MUTUAL', 'MC-MUTUAL', 'cookies', 'personalizables', 'Home',
-            #    'MUTUAL', 'psicosocial', 'personalizables', 'sostenibilidad',
-            #    'Home', 'ICDQ', 'Cyclops', 'Midat', 'MCIT', 'online'
-            #}
+        # Errores ortográficos solo para palabras que no están en la lista excluida y no cumplen con el chequeo del speller
+        errores_ortograficos = [
+            palabra for palabra in palabras if not speller.check(palabra) and palabra.lower() not in PALABRAS_DICCIONARIO and palabra.upper() not in PALABRAS_DICCIONARIO and palabra.capitalize() not in PALABRAS_DICCIONARIO
+        ]
 
-            #palabras_excluidas.update(redes_sociales)
-            #palabras_excluidas.update(provincias_espanolas)
-            #palabras_excluidas.update(comunidades_autonomas_espanolas)
-
-            #print(PALABRAS_DICCIONARIO)
-            # Agrega palabras personalizadas excluidas
-            palabras = {
-                palabra
-                for palabra in texto_limpio.split()
-                if palabra.lower() not in PALABRAS_DICCIONARIO
-                and len(palabra) >= 4
-            }
-
-            # Filtra palabras que tengan TODOS los signos de puntuación, interrogación, exclamación, caracteres especiales o símbolos de moneda
-            caracteres_especiales = string.punctuation + '¡!¿?$€£@#%^&*()_-+=[]{}|;:,.<>/"'
-            palabras = {
-                palabra
-                for palabra in palabras
-                if not all(c in caracteres_especiales for c in palabra)
-            }
-
-            # Errores ortográficos solo para palabras que no están en la lista excluida y no cumplen con el chequeo del speller
-            errores_ortograficos = [
-                palabra for palabra in palabras if not speller.check(palabra)
-            ]
-
-        except Exception as e:
-            print(f"Error al procesar el idioma {idioma_detectado}: {e}")
+    except Exception as e:
+        print(f"Error al procesar el idioma {idioma_detectado}: {e}")
 
     return list(errores_ortograficos)
 
@@ -631,13 +629,18 @@ def contar_enlaces(response_text):
             enlace.startswith(dominio) for dominio in DOMINIOS_ESPECIFICOS)
     ]
 
-    return (len(enlaces), len(enlaces_inseguros), len(enlaces_internos),
-            len(enlaces_internos_unicos), len(enlaces_js_unicos),
-            len(enlaces_salientes), len(enlaces_salientes_unicos),
-            len(enlaces_salientes_js_unicos), len(enlaces_salientes_externos),
-            len(enlaces_salientes_externos_unicos),
-            len(enlaces_salientes_js_externos_unicos))
-
+    return len(enlaces), len(enlaces_inseguros), len(enlaces_internos),\
+            len(enlaces_internos_unicos), len(enlaces_js_unicos),\
+            len(enlaces_salientes), len(enlaces_salientes_unicos),\
+            len(enlaces_salientes_js_unicos), len(enlaces_salientes_externos),\
+            len(enlaces_salientes_externos_unicos),\
+            len(enlaces_salientes_js_externos_unicos), \
+            enlaces, enlaces_inseguros,enlaces_internos,\
+            enlaces_internos_unicos, enlaces_js_unicos,\
+            enlaces_salientes, enlaces_salientes_unicos,\
+            enlaces_salientes_js_unicos, enlaces_salientes_externos,\
+            enlaces_salientes_externos_unicos,\
+            enlaces_salientes_js_externos_unicos
 
 def contar_tipos_archivos(response_text):
     soup = BeautifulSoup(response_text, 'html.parser')
@@ -739,9 +742,42 @@ def obtener_tipo_redireccion(status_code):
 
 
 def contar_palabras_visibles(response_text):
-    visible_text = extraer_texto_visible(response_text)
-    palabras = visible_text.split()
-    return len(palabras)
+    texto_visible = extraer_texto_visible(response_text)
+    palabras = texto_visible.split()
+
+    # Almacenar el número de frases en resultado.frases
+    frases = re.split(r'[;.|,]', texto_visible)
+    
+    # Calcular la media de palabras por frase y almacenarla en resultado.media_palabras_frases
+    palabras_por_frase = [
+        len(frase.split()) for frase in frases
+        if frase.strip()
+    ]
+    media_palabras_frase = sum(
+        palabras_por_frase) / len(
+            palabras_por_frase
+        ) if palabras_por_frase else 0
+  
+    # Calcular la prueba de legibilidad de Flesch-Kincaid y almacenarla en resultado.flesh
+    try:
+        total_palabras = len(
+            re.findall(r'\b\w+\b', texto_visible))
+        total_oraciones = len(frases)
+        #total_silabas = sum([textstat.syllable(word) for word in re.findall(r'\b\w+\b', texto_visible)])
+        total_silabas = sum([
+            textstat.lexicon_count(word, True)
+            for word in re.findall(
+                r'\b\w+\b', texto_visible)
+        ])
+        flesh_score = 206.835 - 1.015 * (
+            total_palabras / total_oraciones
+        ) - 84.6 * (total_silabas / total_palabras)
+        flesh_score = round(
+            flesh_score, 2)
+    except ZeroDivisionError:
+        flesh_score = 0.0
+    
+    return len(palabras), len(frases), media_palabras_frase,flesh_score
 
 
 # Modificaciones en analizar_meta_tags
@@ -873,10 +909,11 @@ def ejecutar_pa11y(url_actual):
         #command = f"pa11y --standard WCAG2AA  --reporter csv {url_actual}"
         #print("url p4lly:")
         #print(url_actual)
-        command = f"pa11y -T 1 --ignore issue-code-2 -r csv {url_actual}"
+        #command = f"pa11y -e axe -d -T 3 --ignore issue-code-2 --ignore issue-code-1 -r json {url_actual}"
+        command = f"pa11y -T 1 --ignore issue-code-2 --ignore issue-code-1 -r json {url_actual}"
         process = subprocess.run(command,
                                  shell=True,
-                                 check=True,
+                                 check=False,
                                  stdout=subprocess.PIPE,
                                  stderr=subprocess.PIPE,
                                  text=True)
@@ -914,7 +951,9 @@ def ejecutar_pa11y(url_actual):
                 })
 
         # Verifica si el resultado de pa11y contiene datos
-        return pa11y_results_list
+        # return pa11y_results_list
+        return process.stdout
+    
     except Exception as e:  # subprocess.CalledProcessError as e:
         error_message = f"Error al ejecutar pa11y para {url_actual}: {e}"
         print(error_message)
@@ -942,7 +981,7 @@ def escanear_dominio(url_dominio, exclusiones=[], extensiones_excluidas=[]):
             continue
 
         try:
-            response = requests.get(url_actual, timeout=180)
+            response = requests.get(url_actual) #, timeout=180)
             tiempo_respuesta = response.elapsed.total_seconds()
             codigo_respuesta = response.status_code
             # Obtener el tipo de documento (Content-Type)
@@ -981,7 +1020,7 @@ def escanear_dominio(url_dominio, exclusiones=[], extensiones_excluidas=[]):
                 resultados_pagina['codigo_respuesta'] = codigo_respuesta
                 resultados_pagina['tipo_documento'] = tipo_documento
             elif codigo_respuesta == 200:
-                if response.headers['content-type'].startswith('text/html'):
+                if response.headers['content-type'].startswith('text'):
                     #if codigo_respuesta == 200 and response.headers['content-type'].startswith('text/html'):
                     #    if es_html_valido(response.text):
                     if 'pdf' in url_actual.lower(
@@ -995,10 +1034,10 @@ def escanear_dominio(url_dominio, exclusiones=[], extensiones_excluidas=[]):
                     resultados_pagina['tipo_documento'] = tipo_documento
 
                     if response.headers['content-type'].startswith(
-                            'text/html'):
+                            'text'):
                         if es_html_valido(response.text):
 
-                            print(f"Escanenado: {url_actual}")
+                            print(f"Escaneando: {url_actual}")
 
                             resultados_pagina[
                                 'enlaces_totales'] = 0  # Inicializar en 0
@@ -1023,12 +1062,7 @@ def escanear_dominio(url_dominio, exclusiones=[], extensiones_excluidas=[]):
                             resultados_pagina[
                                 'enlaces_salientes_js_externos_unicos'] = 0  # Inicializar en 0
 
-                            #heading_tags_count, h1_duplicate = analizar_heading_tags(response.text) #,h1_duplicate
-                            #resultados_pagina['heading_tags'] = heading_tags_count or {}
-                            #resultados_pagina['h1_duplicate'] = h1_duplicate
-                            #meta_tags_info = extraer_meta_tags(response.text) or {}
-                            #resultados_pagina['meta_tags'] = meta_tags_info
-
+                         
                             heading_tags_count, h1_duplicate, h2_mas_70_caracteres, h2_duplicado, h2_multiple, h2_falta, h2_no_secuencial = analizar_heading_tags(
                                 response.text)
                             meta_tags_info, meta_description_mas_155_caracteres, meta_description_duplicado, canonicals_falta, directivas_noindex, \
@@ -1118,12 +1152,20 @@ def escanear_dominio(url_dominio, exclusiones=[], extensiones_excluidas=[]):
                             resultados_pagina[
                                 'alt_vacias'] = contar_alt_vacias(
                                     response.text)
-                            resultados_pagina[
-                                'num_palabras'] = contar_palabras_visibles(
-                                    response.text)
 
-                            enlaces_totales, enlaces_inseguros, enlaces_internos, enlaces_internos_unicos, enlaces_js_unicos, enlaces_salientes, enlaces_salientes_unicos, enlaces_salientes_js_unicos, enlaces_salientes_externos, enlaces_salientes_externos_unicos, enlaces_salientes_js_externos_unicos = contar_enlaces(
-                                response.text)
+                            palabras, frases, media_palabras_frase,flesh_score = contar_palabras_visibles(response.text)
+
+                            resultados_pagina['num_palabras'] = palabras
+                            resultados_pagina['frases'] = frases
+                            resultados_pagina['media_palabras_frase'] = media_palabras_frase
+                            resultados_pagina['flesh_score'] = flesh_score
+                                                        
+                            #resultados_pagina[
+                            #    'num_palabras'] = contar_palabras_visibles(
+                            #        response.text)
+
+                            enlaces_totales, enlaces_inseguros, enlaces_internos, enlaces_internos_unicos, enlaces_js_unicos, enlaces_salientes, enlaces_salientes_unicos, enlaces_salientes_js_unicos, enlaces_salientes_externos, enlaces_salientes_externos_unicos, enlaces_salientes_js_externos_unicos,\
+                            j_enlaces_totales, j_enlaces_inseguros, j_enlaces_internos, j_enlaces_internos_unicos, j_enlaces_js_unicos, j_enlaces_salientes, j_enlaces_salientes_unicos, j_enlaces_salientes_js_unicos, j_enlaces_salientes_externos, j_enlaces_salientes_externos_unicos, j_enlaces_salientes_js_externos_unicos = contar_enlaces(response.text)
 
                             # Almacenar en la base de datos los resultados obtenidos
                             resultados_pagina[
@@ -1164,7 +1206,7 @@ def escanear_dominio(url_dominio, exclusiones=[], extensiones_excluidas=[]):
                             texto_visible = extraer_texto_visible(
                                 response.text)
                             errores_ortograficos = analizar_ortografia(
-                                url_actual
+                                url_actual, texto_visible
                             )  #analizar_ortografia(texto_visible)
                             resultados_pagina[
                                 'errores_ortograficos'] = errores_ortograficos
@@ -1172,8 +1214,8 @@ def escanear_dominio(url_dominio, exclusiones=[], extensiones_excluidas=[]):
                                 'num_errores_ortograficos'] = len(
                                     errores_ortograficos)
 
-                            resultados_pagina['lang'] = detectar_idioma(
-                                response.text)
+                            resultados_pagina['lang'] =obtener_idioma_desde_url(
+                                url_actual)
 
                             # Nuevos campos de revisiÃ³n
                             #meta_tags_revision = analizar_meta_tags(response.text)
@@ -1286,13 +1328,18 @@ def generar_informe_resumen(resumen, nombre_archivo):
 
         for dominio, datos in resumen.items():
             #print(f'Dominio: {dominio}, Datos: {datos}')
-            total_404 = 0
+            total_404 =  0
             paginas_inseguras = 0
-            total_enlaces_inseguros = 0
-            html_valid_count = 0
-            content_valid_count = 0
-            responsive_valid_count = 0
-            valid_aaaa_pages = 0  # Contador para pÃ¡ginas con 'valid_aaa' True
+            total_enlaces_inseguros =  0
+            pages_title_long = 0
+            pages_title_short =  0
+            pages_title_dup = 0
+            pages_desc_long =  0
+            pages_desc_short =  0
+            html_valid_count =  0
+            content_valid_count =  0
+            responsive_valid_count =  0
+            valid_aaaa_pages =  0 # Contador para pÃ¡ginas con 'valid_aaa' True
             codigos_respuesta = datos['codigos_respuesta']
             total_paginas = datos['total_paginas']
             duracion_total = datos['duracion_total']
@@ -1305,9 +1352,9 @@ def generar_informe_resumen(resumen, nombre_archivo):
             pages_err_orto = 0
             pages_alt_vacias = 0
             peso_total_paginas = 0
-            pdf_count = 0
-            html_count = 0
-            others_count = 0
+            pdf_count =  0
+            html_count =  0
+            others_count =  0
 
             #for pagina in datos.get('paginas', []):
             #print(resultados_dominio)
@@ -1349,20 +1396,14 @@ def generar_informe_resumen(resumen, nombre_archivo):
                     False))  # Incrementa el contador si 'valid_aaa' es True
                 #print(resultados_dominio)
 
-            pages_title_long = sum(1 for pagina in resultados_dominio
-                                   if pagina.get('title_long'))
-            pages_title_short = sum(1 for pagina in resultados_dominio
-                                    if pagina.get('title_short'))
-            pages_title_dup = sum(1 for pagina in resultados_dominio
-                                  if pagina.get('title_duplicate'))
-            pages_desc_long = sum(1 for pagina in resultados_dominio
-                                  if pagina.get('desc_long'))
-            pages_desc_short = sum(1 for pagina in resultados_dominio
-                                   if pagina.get('desc_short'))
-            pages_h1_dup = sum(1 for pagina in resultados_dominio
-                               if pagina.get('h1_duplicate'))
-            pages_img_1mb = sum(1 for pagina in resultados_dominio
-                                if pagina.get('images_1MB'))
+            pages_title_long = sum(1 if pagina.get('title_long') else 0 for pagina in resultados_dominio)
+            pages_title_short = sum(1 if pagina.get('title_short') else 0 for pagina in resultados_dominio)
+            pages_title_dup = sum(1 if pagina.get('title_duplicate') else 0 for pagina in resultados_dominio)
+            pages_desc_long = sum(1 if pagina.get('desc_long') else 0 for pagina in resultados_dominio)
+            pages_desc_short = sum(1 if pagina.get('desc_short') else 0 for pagina in resultados_dominio)
+            pages_h1_dup = sum(1 if pagina.get('h1_duplicate') else 0 for pagina in resultados_dominio)
+            pages_img_1mb = sum(1 if pagina.get('images_1MB') else 0 for pagina in resultados_dominio)
+
 
             # Convert Counter to dictionary before writing to CSV
             idiomas_encontrados_dict = dict(idiomas_encontrados)
@@ -1571,6 +1612,30 @@ if __name__ == "__main__":
 
     # InicializaciÃ³n de la sesiÃ³n de SQLAlchemy
     Session = sessionmaker(bind=engine)
+    session = Session()
+
+    print("palabras diccionario de la base de datos dos diccionarios USUARIO")
+    palabras_a_revisar = [palabra.palabra for palabra in session.query(Diccionario_usuario).all()]
+    print(palabras_a_revisar)
+    print("palabras diccionario de la base de datos dos diccionarios NORMALES")
+    palabras_a_revisar.extend([palabra.palabra for palabra in session.query(Diccionario).all()])
+    #print(palabras_a_revisar)
+    session.close()
+
+    #lista_palabras = json.dumps(palabras_a_revisar)
+    
+    palabras_limpias = []
+    for palabra in palabras_a_revisar:
+        # Remover caracteres no deseados como retornos de carro, espacios, tabuladores, etc.
+        palabra_limpia = palabra.replace('\n', '').replace('\t', '').strip()
+        palabras_limpias.append(palabra_limpia)
+
+    PALABRAS_DICCIONARIO = palabras_a_revisar
+
+    #print("palabras diccionario de la base de datos dos diccionarios")
+    #print(PALABRAS_DICCIONARIO)
+
+    Session = sessionmaker(bind=engine)
 
     session = Session()
 
@@ -1580,9 +1645,9 @@ if __name__ == "__main__":
             resumen_escaneo = {}
 
             # Extraer todas las palabras de la columna "palabra" de la tabla "diccionario"
-            PALABRAS_DICCIONARIO = [
-                row.palabra for row in session.query(Diccionario).all()
-            ]
+            #PALABRAS_DICCIONARIO = [
+            #    row.palabra for row in session.query(Diccionario).all()
+            #]
             #print(PALABRAS_DICCIONARIO)
 
             for url in urls_a_escanear:
@@ -1727,7 +1792,12 @@ if __name__ == "__main__":
                         'total_h2_falta':
                         0,
                         'total_h2_no_secuencial':
-                        0
+                        0,
+                        'pages_title_long' : 0,
+                        'pages_title_short' :  0,
+                        'pages_title_dup' : 0,
+                        'pages_desc_long' :  0,
+                        'pages_desc_short' :  0,
                     }
 
                     guardar_en_csv_y_json(resultados_dominio,
@@ -1766,6 +1836,14 @@ if __name__ == "__main__":
                         # Si no hay registros para el dominio, continuar con el siguiente
                         if most_recent_date is None:
                             continue
+
+                        pages_title_long = sum(1 if pagina.get('title_long') else 0 for pagina in resultados_dominio)
+                        pages_title_short = sum(1 if pagina.get('title_short') else 0 for pagina in resultados_dominio)
+                        pages_title_dup = sum(1 if pagina.get('title_duplicate') else 0 for pagina in resultados_dominio)
+                        pages_desc_long = sum(1 if pagina.get('desc_long') else 0 for pagina in resultados_dominio)
+                        pages_desc_short = sum(1 if pagina.get('desc_short') else 0 for pagina in resultados_dominio)
+                        pages_h1_dup = sum(1 if pagina.get('h1_duplicate') else 0 for pagina in resultados_dominio)
+                        pages_img_1mb = sum(1 if pagina.get('images_1MB') else 0 for pagina in resultados_dominio)
 
                         suma_media_frases = session.query(
                             func.sum(Resultado.frases)).filter(
@@ -2233,14 +2311,31 @@ if __name__ == "__main__":
 
                                     for palabra in resultado.errores_ortograficos:
                                         # Encontrar la posición de la palabra en el HTML original
-                                        start_index = modified_html.find(palabra)
+                                        #start_index = modified_html.find(palabra)
 
-                                        if start_index != -1:
-                                            modified_html = (
+                                        #if start_index != -1:
+                                        #    modified_html = (
+                                        #        modified_html[:start_index] +
+                                        #        f'<span style="background-color:red!important;color:white!important;border:2px solid #fff!important">{palabra}</span>'
+                                        #        + modified_html[start_index +
+                                        #                        len(palabra):])
+
+                                        # Buscar la etiqueta <body> en el HTML
+                                        start_body_index = modified_html.find('<body>')
+        
+                                        # Si no encuentra la etiqueta <body>, buscar en todo el documento
+                                        if start_body_index == -1:
+                                            start_index = modified_html.find(palabra)
+                                        else:
+                                            # Encontrar la posición de la palabra en el HTML original después de la etiqueta <body>
+                                            start_index = modified_html.find(palabra, start_body_index)
+        
+                                            if start_index != -1:
+                                                modified_html = (
                                                 modified_html[:start_index] +
                                                 f'<span style="background-color:red!important;color:white!important;border:2px solid #fff!important">{palabra}</span>'
                                                 + modified_html[start_index +
-                                                                len(palabra):])
+                                                len(palabra):])
 
                                     # Campos a almacenar en la instancia de Resultado
                                     campos_html_copy = [
@@ -2336,6 +2431,11 @@ if __name__ == "__main__":
                             sumario_existente.total_h2_multiple = total_h2_multiple
                             sumario_existente.total_h2_falta = total_h2_falta
                             sumario_existente.total_h2_no_secuencial = total_h2_no_secuencial
+                            sumario_existente.pages_title_long = pages_title_long
+                            sumario_existente.pages_desc_short = pages_title_short
+                            sumario_existente.pages_title_dup = pages_title_dup 
+                            sumario_existente.pages_desc_long = pages_desc_long
+                            sumario_existente.pages_desc_short = pages_desc_short 
                         else:
                             # Manejar el caso en que no se encontró el Sumario existente (puede imprimir un mensaje o lanzar una excepción según tus necesidades)
                             print(
@@ -2360,6 +2460,3 @@ if __name__ == "__main__":
                 generar_informe_resumen(resumen_escaneo, 'resumen_escaneo.csv')
     else:
         print("El script no se ejecutará debido a la existencia del archivo .lock.")
-
-
-

@@ -17,7 +17,6 @@ import string
 from PIL import Image
 from io import BytesIO
 import os
-import json
 import imghdr
 import subprocess
 from collections import Counter
@@ -26,12 +25,12 @@ from urllib.parse import urlparse, urljoin
 import aspell
 import string
 import langid
-from sqlalchemy import Boolean, func, create_engine, Column, Integer, String, Text, DateTime, JSON, desc, update, Float
+from sqlalchemy import Boolean, func, create_engine, Column, Integer, String, Text, DateTime, JSON, Float
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
-from sqlalchemy.exc import IntegrityError, OperationalError
-from sqlalchemy import LargeBinary
+from sqlalchemy.exc import OperationalError
 import secrets
+import re
 import logging
 #from langdetect import detect
 
@@ -287,7 +286,7 @@ def extraer_texto_visible(response_text):
     return visible_text
 
 
-import re
+
 
 def obtener_idioma_desde_url(url):
     try:
@@ -307,8 +306,8 @@ def obtener_idioma_desde_url(url):
             if idioma_meta:
                 # Elimina las comillas escapadas usando expresiones regulares
                 codigo_idioma = re.sub(r'^\\"|\\"$', '', idioma_meta).split('_')[0]
-                print("idioma:")
-                print(codigo_idioma)
+                #print("idioma:")
+                #print(codigo_idioma)
                 return codigo_idioma
             else:
                 print("No se encontró el atributo content en la etiqueta meta con property='og:locale'.")
@@ -322,8 +321,8 @@ def obtener_idioma_desde_url(url):
             if idioma_html:
                 # Elimina las comillas escapadas usando expresiones regulares
                 codigo_idioma = re.sub(r'^\\"|\\"$', '', idioma_html).split('-')[0]
-                print("idioma:")
-                print(codigo_idioma)
+                #print("idioma:")
+                #print(codigo_idioma)
                 return codigo_idioma
             else:
                 print("No se encontró el atributo lang en la etiqueta <html>.")
@@ -341,9 +340,6 @@ def obtener_idioma_desde_url(url):
     return "es"  # Idioma predeterminado
 
 
-    return "es"  # Idioma predeterminado
-
-
 
 def detectar_idioma(texto):
     try:
@@ -352,6 +348,20 @@ def detectar_idioma(texto):
     except Exception as e:
         print(f"Error al detectar el idioma: {e}")
         return None
+
+
+def configurar_speller(idioma):
+    # Configura los parámetros comunes de aspell
+    parametros = [
+        '--mode=html',
+        #'--encoding=utf-8',  # Especifica la codificación de caracteres
+        '--lang=' + idioma,  # Especifica el idioma
+        '--ignore-case',     # Ignora mayúsculas/minúsculas
+        #'--sug-mode=fast',   # Modo rápido para sugerencias
+        #'--run-together',    # Considera palabras combinadas como válidas
+    ]
+
+    return aspell.Speller(parametros)
 
 
 def analizar_ortografia(url, texto,
@@ -370,44 +380,6 @@ def analizar_ortografia(url, texto,
             '', '', string.digits + string.punctuation + '¡!¿?')
         texto_limpio = texto.translate(translator)
 
-        #palabras_excluidas = {
-        #    'MUTUAL', 'MC-MUTUAL', 'cookies', 'personalizables', 'Home',
-        #    'MUTUAL', 'psicosocial', 'personalizables', 'sostenibilidad',
-        #    'Home', 'ICDQ', 'Cyclops', 'Midat', 'MCIT', 'online'
-        #}
-        #palabras_excluidas.update({
-        #    'Zonnox', 'VoIP', 'Home', 'Garum', 'Murex', 'Distwin',
-        #    'LealtyCard', 'MiGasolinera', '4GL'
-        #})
-        #redes_sociales = {
-        #    'facebook', 'twitter', 'instagram', 'linkedin', 'pinterest',
-        #    'snapchat', 'tiktok', 'youtube', 'whatsapp', 'telegram',
-        #    'reddit', 'tumblr', 'flickr', 'vimeo', 'myspace', 'google+',
-        #    'wechat', 'wechat', 'weibo', 'xing', 'vk', 'renren', 'badoo',
-        #    'hi5', 'orkut', 'friendster'
-        #}
-
-        #provincias_espanolas = {
-        #    'madrid', 'barcelona', 'valencia', 'sevilla', 'zaragoza',
-        #    'malaga', 'murcia', 'palma', 'bilbao', 'alicante', 'cordoba',
-        #    'valladolid', 'vigo', 'gijon', 'hospitalet', 'coruna',
-        #    'vitoria', 'granada', 'elche', 'oviedo', 'sabadell',
-        #    'santa cruz', 'pamplona', 'cartagena'
-        #}
-
-        #comunidades_autonomas_espanolas = {
-        #    'andalucia', 'aragon', 'asturias', 'baleares', 'canarias',
-        #    'cantabria', 'castilla la mancha', 'castilla y leon',
-        #    'cataluna', 'extremadura', 'galicia', 'madrid', 'murcia',
-        #    'navarra', 'pais vasco', 'la rioja', 'comunidad valenciana',
-        #    'MUTUAL', 'MC-MUTUAL', 'cookies', 'personalizables', 'Home',
-        #    'MUTUAL', 'psicosocial', 'personalizables', 'sostenibilidad',
-        #    'Home', 'ICDQ', 'Cyclops', 'Midat', 'MCIT', 'online'
-        #}
-
-        #palabras_excluidas.update(redes_sociales)
-        #palabras_excluidas.update(provincias_espanolas)
-        #palabras_excluidas.update(comunidades_autonomas_espanolas)
 
         #print(PALABRAS_DICCIONARIO)
         # Agrega palabras personalizadas excluidas
@@ -941,10 +913,11 @@ def ejecutar_pa11y(url_actual):
         #command = f"pa11y --standard WCAG2AA  --reporter csv {url_actual}"
         #print("url p4lly:")
         #print(url_actual)
-        command = f"pa11y -T 1 --ignore issue-code-2 -r csv {url_actual}"
+        #command = f"pa11y -e axe -d -T 3 --ignore issue-code-2 --ignore issue-code-1 -r json {url_actual}"
+        command = f"pa11y -T 1 --ignore issue-code-2 --ignore issue-code-1 -r json {url_actual}"
         process = subprocess.run(command,
                                  shell=True,
-                                 check=True,
+                                 check=False,
                                  stdout=subprocess.PIPE,
                                  stderr=subprocess.PIPE,
                                  text=True)
@@ -982,7 +955,9 @@ def ejecutar_pa11y(url_actual):
                 })
 
         # Verifica si el resultado de pa11y contiene datos
-        return pa11y_results_list
+        # return pa11y_results_list
+        return process.stdout
+    
     except Exception as e:  # subprocess.CalledProcessError as e:
         error_message = f"Error al ejecutar pa11y para {url_actual}: {e}"
         print(error_message)
@@ -1066,7 +1041,7 @@ def escanear_dominio(url_dominio, exclusiones=[], extensiones_excluidas=[]):
                             'text'):
                         if es_html_valido(response.text):
 
-                            print(f"Escanenado: {url_actual}")
+                            print(f"Escaneando: {url_actual}")
 
                             resultados_pagina[
                                 'enlaces_totales'] = 0  # Inicializar en 0
@@ -1357,18 +1332,18 @@ def generar_informe_resumen(resumen, nombre_archivo):
 
         for dominio, datos in resumen.items():
             #print(f'Dominio: {dominio}, Datos: {datos}')
-            total_404 = 0
+            total_404 =  0
             paginas_inseguras = 0
-            total_enlaces_inseguros = 0
+            total_enlaces_inseguros =  0
             pages_title_long = 0
-            pages_title_short = 0
+            pages_title_short =  0
             pages_title_dup = 0
-            pages_desc_long = 0
-            pages_desc_short = 0
-            html_valid_count = 0
-            content_valid_count = 0
-            responsive_valid_count = 0
-            valid_aaaa_pages = 0  # Contador para pÃ¡ginas con 'valid_aaa' True
+            pages_desc_long =  0
+            pages_desc_short =  0
+            html_valid_count =  0
+            content_valid_count =  0
+            responsive_valid_count =  0
+            valid_aaaa_pages =  0 # Contador para pÃ¡ginas con 'valid_aaa' True
             codigos_respuesta = datos['codigos_respuesta']
             total_paginas = datos['total_paginas']
             duracion_total = datos['duracion_total']
@@ -1381,9 +1356,9 @@ def generar_informe_resumen(resumen, nombre_archivo):
             pages_err_orto = 0
             pages_alt_vacias = 0
             peso_total_paginas = 0
-            pdf_count = 0
-            html_count = 0
-            others_count = 0
+            pdf_count =  0
+            html_count =  0
+            others_count =  0
 
             #for pagina in datos.get('paginas', []):
             #print(resultados_dominio)
@@ -1425,20 +1400,14 @@ def generar_informe_resumen(resumen, nombre_archivo):
                     False))  # Incrementa el contador si 'valid_aaa' es True
                 #print(resultados_dominio)
 
-            pages_title_long = sum(1 for pagina in resultados_dominio
-                                   if pagina.get('title_long'))
-            pages_title_short = sum(1 for pagina in resultados_dominio
-                                    if pagina.get('title_short'))
-            pages_title_dup = sum(1 for pagina in resultados_dominio
-                                  if pagina.get('title_duplicate'))
-            pages_desc_long = sum(1 for pagina in resultados_dominio
-                                  if pagina.get('desc_long'))
-            pages_desc_short = sum(1 for pagina in resultados_dominio
-                                   if pagina.get('desc_short'))
-            pages_h1_dup = sum(1 for pagina in resultados_dominio
-                               if pagina.get('h1_duplicate'))
-            pages_img_1mb = sum(1 for pagina in resultados_dominio
-                                if pagina.get('images_1MB'))
+            pages_title_long = sum(1 if pagina.get('title_long') else 0 for pagina in resultados_dominio)
+            pages_title_short = sum(1 if pagina.get('title_short') else 0 for pagina in resultados_dominio)
+            pages_title_dup = sum(1 if pagina.get('title_duplicate') else 0 for pagina in resultados_dominio)
+            pages_desc_long = sum(1 if pagina.get('desc_long') else 0 for pagina in resultados_dominio)
+            pages_desc_short = sum(1 if pagina.get('desc_short') else 0 for pagina in resultados_dominio)
+            pages_h1_dup = sum(1 if pagina.get('h1_duplicate') else 0 for pagina in resultados_dominio)
+            pages_img_1mb = sum(1 if pagina.get('images_1MB') else 0 for pagina in resultados_dominio)
+
 
             # Convert Counter to dictionary before writing to CSV
             idiomas_encontrados_dict = dict(idiomas_encontrados)
@@ -1803,7 +1772,12 @@ if __name__ == "__main__":
                         'total_h2_falta':
                         0,
                         'total_h2_no_secuencial':
-                        0
+                        0,
+                        'pages_title_long' : 0,
+                        'pages_title_short' :  0,
+                        'pages_title_dup' : 0,
+                        'pages_desc_long' :  0,
+                        'pages_desc_short' :  0,
                     }
 
                     guardar_en_csv_y_json(resultados_dominio,
@@ -1842,6 +1816,14 @@ if __name__ == "__main__":
                         # Si no hay registros para el dominio, continuar con el siguiente
                         if most_recent_date is None:
                             continue
+
+                        pages_title_long = sum(1 if pagina.get('title_long') else 0 for pagina in resultados_dominio)
+                        pages_title_short = sum(1 if pagina.get('title_short') else 0 for pagina in resultados_dominio)
+                        pages_title_dup = sum(1 if pagina.get('title_duplicate') else 0 for pagina in resultados_dominio)
+                        pages_desc_long = sum(1 if pagina.get('desc_long') else 0 for pagina in resultados_dominio)
+                        pages_desc_short = sum(1 if pagina.get('desc_short') else 0 for pagina in resultados_dominio)
+                        pages_h1_dup = sum(1 if pagina.get('h1_duplicate') else 0 for pagina in resultados_dominio)
+                        pages_img_1mb = sum(1 if pagina.get('images_1MB') else 0 for pagina in resultados_dominio)
 
                         suma_media_frases = session.query(
                             func.sum(Resultado.frases)).filter(
@@ -2412,6 +2394,11 @@ if __name__ == "__main__":
                             sumario_existente.total_h2_multiple = total_h2_multiple
                             sumario_existente.total_h2_falta = total_h2_falta
                             sumario_existente.total_h2_no_secuencial = total_h2_no_secuencial
+                            sumario_existente.pages_title_long = pages_title_long
+                            sumario_existente.pages_desc_short = pages_title_short
+                            sumario_existente.pages_title_dup = pages_title_dup 
+                            sumario_existente.pages_desc_long = pages_desc_long
+                            sumario_existente.pages_desc_short = pages_desc_short 
                         else:
                             # Manejar el caso en que no se encontró el Sumario existente (puede imprimir un mensaje o lanzar una excepción según tus necesidades)
                             print(
@@ -2436,6 +2423,3 @@ if __name__ == "__main__":
                 generar_informe_resumen(resumen_escaneo, 'resumen_escaneo.csv')
     else:
         print("El script no se ejecutará debido a la existencia del archivo .lock.")
-
-
-
