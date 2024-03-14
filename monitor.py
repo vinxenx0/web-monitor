@@ -372,7 +372,8 @@ def analizar_ortografia(url, texto,
 
         # Eliminar números y símbolos de moneda, así como exclamaciones, interrogaciones y caracteres similares
         translator = str.maketrans(
-            '', '', string.digits + string.punctuation + '¡!¿?“”»«¡!¿?$€£@#%^&*()_-+=[]{}|;:,.<>/–“"')
+            '', '', string.digits + string.punctuation + '$€£')
+        #    '', '', string.digits + string.punctuation + '¡!¿?“”»«¡!¿?$€£@#%^&*()_-+=[]{}|;:,.<>/–“"')
         texto_limpio = texto.translate(translator)
 
         #print("revisando pagina ortografia")
@@ -386,7 +387,8 @@ def analizar_ortografia(url, texto,
         #}
 
         # Filtra palabras que tengan TODOS los signos de puntuación, interrogación, exclamación, caracteres especiales o símbolos de moneda
-        caracteres_especiales = string.punctuation + '“”»«¡!¿?$€£@#%^&*()_-+=[]{}|;:,.<>/–“"'
+        #caracteres_especiales = string.punctuation + '“”»«¡!¿?$€£@#%^&*()_-+=[]{}|;:,.<>/–“"'
+        caracteres_especiales = string.punctuation + '»«'
         palabras = {
             palabra
             for palabra in texto_limpio.split()
