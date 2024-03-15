@@ -26,11 +26,12 @@ from urllib.parse import urlparse, urljoin
 import aspell
 import string
 import langid
-from sqlalchemy import Boolean, func, create_engine, Column, Integer, String, Text, DateTime, JSON, Float
+from sqlalchemy import Boolean, distinct, func, create_engine, Column, Integer, String, Text, DateTime, JSON, Float
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.exc import OperationalError
 import secrets
+from sqlalchemy import desc
 import re
 import logging
 #from langdetect import detect
@@ -156,6 +157,12 @@ class Configuracion(Base):
     __tablename__ = 'configuracion'
     id = Column(Integer, primary_key=True)
     is_running = Column(Boolean)
+    dominios_analizar = Column(JSON)
+    frecuencia_dias = Column(Integer)
+    w3c_validator = Column(String(255))
+    url_Excluidas = Column(JSON)
+    extensiones_Excluidas = Column(JSON)
+    keywords_analizar = Column(JSON)
 
 
 # Definir el modelo de la tabla "sumario"
@@ -372,7 +379,7 @@ def analizar_ortografia(url, texto,
 
         # Eliminar números y símbolos de moneda, así como exclamaciones, interrogaciones y caracteres similares
         translator = str.maketrans(
-            '', '', string.digits + string.punctuation + '$€£')
+            '', '', string.digits + string.punctuation + '$€£»«¿?')
         #    '', '', string.digits + string.punctuation + '¡!¿?“”»«¡!¿?$€£@#%^&*()_-+=[]{}|;:,.<>/–“"')
         texto_limpio = texto.translate(translator)
 
@@ -913,7 +920,7 @@ def ejecutar_pa11y(url_actual):
         #print("url p4lly:")
         #print(url_actual)
         #command = f"pa11y -e axe -d -T 3 --ignore issue-code-2 --ignore issue-code-1 -r json {url_actual}"
-        command = f"pa11y -T 1 --ignore issue-code-2 --ignore issue-code-1 -r json {url_actual}"
+        command = f"pa11y --standard {W3C_VALIDATOR} -T 1 --ignore issue-code-2 --ignore issue-code-1 -r json {url_actual}"
         process = subprocess.run(command,
                                  shell=True,
                                  check=False,
@@ -1576,7 +1583,7 @@ def guardar_en_csv_y_json(resultados, nombre_archivo_base, modo='w'):
     #        json.dump(resultados, archivo_json, ensure_ascii=False, indent=4)
 
 
-from config import DOMINIOS_ESPECIFICOS, USER, PWD, HOST, DB, PATRONES_EXCLUSION, EXTENSIONES_EXCLUIDAS, PALABRAS_DICCIONARIO
+from config import DOMINIOS_ESPECIFICOS, USER, PWD, HOST, DB,  IS_RUNNING, FRECUENCIA, W3C_VALIDATOR, PATRONES_EXCLUSION, EXTENSIONES_EXCLUIDAS, KEYWORDS
 
 if __name__ == "__main__":
 
@@ -1615,13 +1622,21 @@ if __name__ == "__main__":
     session = Session()
 
     #carga las configuraciones
+                           
+    ultima_configuracion = session.query(Configuracion).order_by(desc(Configuracion.id)).first()
 
-    urls_a_escanear = DOMINIOS_ESPECIFICOS
-    patrones_exclusion = PATRONES_EXCLUSION
-    extensiones_excluidas = EXTENSIONES_EXCLUIDAS
-
-
-
+    if ultima_configuracion:
+        IS_RUNNING = ultima_configuracion.is_running
+        DOMINIOS_ESPECIFICOS = ultima_configuracion.dominios_analizar.split('\r\n') if ultima_configuracion.dominios_analizar else []
+        #DOMINIOS_ESPECIFICOS = json.dumps(ultima_configuracion.dominios_analizar) if ultima_configuracion.dominios_analizar else []
+        FRECUENCIA = ultima_configuracion.frecuencia_dias
+        W3C_VALIDATOR = ultima_configuracion.w3c_validator
+        PATRONES_EXCLUSION = ultima_configuracion.url_Excluidas.split('\r\n') if ultima_configuracion.url_Excluidas else []
+        EXTENSIONES_EXCLUIDAS = ultima_configuracion.extensiones_Excluidas.split('\r\n') if ultima_configuracion.extensiones_Excluidas else []
+        KEYWORDS = ultima_configuracion.keywords_analizar.split('\r\n') if ultima_configuracion.keywords_analizar else []
+    else:
+        print("error recuperando config")
+        
     #print("palabras diccionario de la base de datos dos diccionarios USUARIO")
     palabras_a_revisar = [palabra.palabra for palabra in session.query(Diccionario_usuario).all()]
     #print(palabras_a_revisar)
@@ -1640,12 +1655,31 @@ if __name__ == "__main__":
 
     PALABRAS_DICCIONARIO = palabras_a_revisar
 
+    print(ultima_configuracion.dominios_analizar)
+
     #print("palabras diccionario de la base de datos dos diccionarios")
-    #print(PALABRAS_DICCIONARIO)
+    # Imprimir los valores recogidos
+    print("Última Configuración:")
+    print(f"Is Running: {IS_RUNNING}")
+    print(f"Dominios a Analizar: {DOMINIOS_ESPECIFICOS}")
+    print(f"Frecuencia de Días: {FRECUENCIA}")
+    print(f"W3C Validator: {W3C_VALIDATOR}")
+    print(f"URL Excluidas: {PATRONES_EXCLUSION}")
+    print(f"Extensiones Excluidas: {EXTENSIONES_EXCLUIDAS}")
+    print(f"Keywords a Analizar: {KEYWORDS}")
+    print(f"Diccionario: {PALABRAS_DICCIONARIO}")
+
+
+    print(f"ruta pally: pa11y --standard {W3C_VALIDATOR} -T 1 --ignore issue-code-2 --ignore issue-code-1 -r json <url_actual>")
 
     Session = sessionmaker(bind=engine)
 
     session = Session()
+
+    urls_a_escanear = DOMINIOS_ESPECIFICOS
+    patrones_exclusion = PATRONES_EXCLUSION
+    extensiones_excluidas = EXTENSIONES_EXCLUIDAS
+
 
     if crear_lock(session):
         try:
@@ -1658,14 +1692,15 @@ if __name__ == "__main__":
             #]
             #print(PALABRAS_DICCIONARIO)
 
-            for url in urls_a_escanear:
+            for url in DOMINIOS_ESPECIFICOS:
+                print(f"url a escanear: {url}")
                 start_time = time.time()
                 hora_inicio = datetime.now().strftime('%H:%M:%S')
 
                 id_escaneo = secrets.token_hex(32)
 
-                resultados_dominio = escanear_dominio(url, patrones_exclusion,
-                                                    extensiones_excluidas)
+                resultados_dominio = escanear_dominio(url, PATRONES_EXCLUSION,
+                                                    EXTENSIONES_EXCLUIDAS)
                 end_time = time.time()
 
                 duracion_total = end_time - start_time
