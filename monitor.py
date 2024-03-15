@@ -1587,6 +1587,7 @@ from config import DOMINIOS_ESPECIFICOS, USER, PWD, HOST, DB,  IS_RUNNING, FRECU
 
 if __name__ == "__main__":
 
+    print(f"{USER}@{PWD}\\{DB}@{HOST}")
 
     # Directorios a verificar y crear si no existen
     directorios = ['logs', 'offline', 'results']
@@ -1605,6 +1606,7 @@ if __name__ == "__main__":
 
     start_script_time = time.time()
 
+    print("aqui llega")
   
     #engine = create_engine("mysql+mysqlconnector://usuario:contraseña@localhost/db?connect_timeout=300")
     engine = create_engine(
@@ -1615,13 +1617,17 @@ if __name__ == "__main__":
         pool_recycle=3600,
         echo=False
     )  # Cambia 'echo=True' a 'False' para desactivar el modo verbose
+    print("aqui llega 2")
     Base.metadata.create_all(engine)
+    print("aqui llega 3")
 
     # InicializaciÃ³n de la sesiÃ³n de SQLAlchemy
     Session = sessionmaker(bind=engine)
     session = Session()
 
     #carga las configuraciones
+
+    print("aqui llega 4")
                            
     ultima_configuracion = session.query(Configuracion).order_by(desc(Configuracion.id)).first()
 
@@ -1672,9 +1678,9 @@ if __name__ == "__main__":
 
     print(f"ruta pally: pa11y --standard {W3C_VALIDATOR} -T 1 --ignore issue-code-2 --ignore issue-code-1 -r json <url_actual>")
 
-    Session = sessionmaker(bind=engine)
+    #Session = sessionmaker(bind=engine)
 
-    session = Session()
+    #session = Session()
 
     urls_a_escanear = DOMINIOS_ESPECIFICOS
     patrones_exclusion = PATRONES_EXCLUSION
