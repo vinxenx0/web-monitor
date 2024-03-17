@@ -2496,8 +2496,9 @@ if __name__ == "__main__":
                             )
 
                         # Confirmar los cambios en la base de datos
-                        session.commit()
+                        #session.commit()
         finally:
+                session.commit()
                 eliminar_lock(session)
                 end_script_time = time.time()
                 script_duration = end_script_time - start_script_time
