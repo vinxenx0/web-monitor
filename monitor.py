@@ -379,9 +379,13 @@ def analizar_ortografia(url, texto,
 
         # Eliminar números y símbolos de moneda, así como exclamaciones, interrogaciones y caracteres similares
         translator = str.maketrans(
-            '', '', string.digits + string.punctuation + '$€£»«¿?')
+             '', '', string.digits + string.punctuation + '“”$€£»«¿?¡!.“')
         #    '', '', string.digits + string.punctuation + '¡!¿?“”»«¡!¿?$€£@#%^&*()_-+=[]{}|;:,.<>/–“"')
+
+
         texto_limpio = texto.translate(translator)
+
+
 
         #print("revisando pagina ortografia")
         #print(PALABRAS_DICCIONARIO)
@@ -1673,7 +1677,7 @@ if __name__ == "__main__":
     print(f"URL Excluidas: {PATRONES_EXCLUSION}")
     print(f"Extensiones Excluidas: {EXTENSIONES_EXCLUIDAS}")
     print(f"Keywords a Analizar: {KEYWORDS}")
-    print(f"Diccionario: {PALABRAS_DICCIONARIO}")
+    #print(f"Diccionario: {PALABRAS_DICCIONARIO}")
 
 
     print(f"ruta pally: pa11y --standard {W3C_VALIDATOR} -T 1 --ignore issue-code-2 --ignore issue-code-1 -r json <url_actual>")
