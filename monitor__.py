@@ -6,7 +6,6 @@
 # vinxenxo@protonmail.com
 
 import traceback
-
 import csv
 import re
 import json
@@ -480,7 +479,7 @@ def extraer_meta_tags(response_text, response):
         header[0] for header in response.headers
     ]
 
-   # Verificar si existe un elemento h1 antes de acceder a su atributo 'text'
+    # Verificar si existe un elemento h1 antes de acceder a su atributo 'text'
     h1_element = soup.find('h1')
     if h1_element is not None:
         h1_text = h1_element.text
@@ -520,20 +519,12 @@ def extraer_meta_tags(response_text, response):
     #hreflang_falta_x_default = ...  # Lógica para determinar si se cumple la condición
     #seguridad_falta_encabezado_hsts = ...  # Lógica para determinar si se cumple la condición
 
-    #return meta_tags_info, meta_description_mas_155_caracteres, meta_description_duplicado, canonicals_falta, directivas_noindex, \
-    #       falta_encabezado_x_content_type_options, falta_encabezado_secure_referrer_policy, \
-    #       falta_encabezado_content_security_policy, falta_encabezado_x_frame_options, \
-    #       titulos_pagina_menos_30_caracteres, meta_description_menos_70_caracteres, titulos_pagina_mas_60_caracteres, \
-    #       titulos_pagina_igual_h1, titulos_pagina_duplicado, meta_description_falta, version_http, ultima_modificacion, \
-    #       meta_og_card, meta_og_title, meta_og_image, hreflang_enlaces_vuelta_noindex, hreflang_falta_x_default, seguridad_falta_encabezado_hsts
-
-
-    return meta_tags_info, meta_description_mas_155_caracteres, meta_description_duplicado, canonicals_falta, directivas_noindex, \
-           falta_encabezado_x_content_type_options, falta_encabezado_secure_referrer_policy, \
-           falta_encabezado_content_security_policy, falta_encabezado_x_frame_options, \
-           titulos_pagina_menos_30_caracteres, meta_description_menos_70_caracteres, titulos_pagina_mas_60_caracteres, \
-           titulos_pagina_igual_h1, titulos_pagina_duplicado, meta_description_falta, version_http, ultima_modificacion, \
-           meta_og_card, meta_og_title, meta_og_image
+    return (meta_tags_info, meta_description_mas_155_caracteres, meta_description_duplicado, canonicals_falta,
+            directivas_noindex, falta_encabezado_x_content_type_options, falta_encabezado_secure_referrer_policy,
+            falta_encabezado_content_security_policy, falta_encabezado_x_frame_options,
+            titulos_pagina_menos_30_caracteres, meta_description_menos_70_caracteres, titulos_pagina_mas_60_caracteres,
+            titulos_pagina_igual_h1, titulos_pagina_duplicado, meta_description_falta, version_http,
+            ultima_modificacion, meta_og_card, meta_og_title, meta_og_image)
 
 
 def extraer_informacion_imagenes(response_text, base_url):
@@ -867,6 +858,7 @@ def analizar_meta_tags(response_text):
     meta_tags_info[
         'c_charset'] = 'utf-8'  #charset_tag.get('charset') if charset_tag else ''
 
+
     for tag in soup.find_all('meta'):
         tag_name = tag.get('name', '').lower()
         tag_content = tag.get('content', '').lower()
@@ -1007,7 +999,7 @@ def escanear_dominio(url_dominio, exclusiones=[], extensiones_excluidas=[]):
             continue
 
         try:
-            response = requests.get(url_actual) #, timeout=180)
+            response = requests.get(url_actual) #, verify=False, timeout=180) #, timeout=180)
             tiempo_respuesta = response.elapsed.total_seconds()
             codigo_respuesta = response.status_code
             # Obtener el tipo de documento (Content-Type)
@@ -1319,7 +1311,8 @@ def escanear_dominio(url_dominio, exclusiones=[], extensiones_excluidas=[]):
 
             urls_por_escanear.extend(enlaces_filtrados)
         except Exception as e:
-            print(f"Error al escanear {url_actual}: {str(e)}")
+            with open("traceback.txt", "w") as f:
+                 traceback.print_exc(file=f)
 
         urls_escaneadas.add(url_actual)
 
@@ -2336,29 +2329,9 @@ if __name__ == "__main__":
                                 response = requests.get(resultado.pagina)
 
                                 if response.status_code == 200:
-                                    
-                                    # Parsear el contenido HTML
-                                    soup = BeautifulSoup(response.text, 'html.parser')
-
-                                    # Buscar todas las etiquetas de texto (p, div, span, etc.)
-                                    etiquetas_texto = soup.find_all(text=True)
-
-                                    # Buscar palabras con errores ortográficos y resaltarlas con CSS
-                                    for tag in etiquetas_texto:
-                                        contenido_tag = str(tag)
-                                        for error in resultado.errores_ortograficos:
-                                            # Usamos expresiones regulares para encontrar todas las ocurrencias de la palabra con errores ortográficos
-                                            contenido_tag = re.sub(r'\b' + re.escape(error) + r'\b', f'<span style="color:white!important;background-color:red!important">{error}</span>', contenido_tag, flags=re.IGNORECASE)
-                                        tag.replace_with(BeautifulSoup(contenido_tag, 'html.parser'))  # Creamos un nuevo objeto BeautifulSoup con el contenido modificado
-
-
-                                    # Generar el contenido HTML con las palabras resaltadas
-                                    contenido_html = str(soup)
-
-
-                                    # Guardar el contenido HTML en un archivo
-                                    with open('pagina_con_errores.html', 'w', encoding='utf-8') as file:
-                                        file.write(contenido_html)
+                                    # Parsear el HTML y buscar palabras de errores ortográficos
+                                    soup = BeautifulSoup(response.text,
+                                                        'html.parser')
 
                                     # Obtener el texto visible de la página
                                     texto_visible = soup.get_text()
@@ -2462,8 +2435,7 @@ if __name__ == "__main__":
                                     # Escribir el HTML en el archivo
                                     with open(filepath, 'w',
                                             encoding='utf-8') as file:
-                                        #file.write(modified_html)
-                                        file.write(contenido_html)
+                                        file.write(modified_html)
 
                                     print(f"HTML guardado en: {filepath}")
 
@@ -2545,10 +2517,10 @@ if __name__ == "__main__":
                             )
 
                         # Confirmar los cambios en la base de datos
-                        session.commit()
+                        #session.commit()
         finally:
                 eliminar_lock(session)
-                #session.commit()
+                session.commit()
                 end_script_time = time.time()
                 script_duration = end_script_time - start_script_time
 
@@ -2563,4 +2535,3 @@ if __name__ == "__main__":
                 generar_informe_resumen(resumen_escaneo, 'resumen_escaneo.csv')
     else:
         print("El script no se ejecutará debido a la existencia del archivo .lock.")
-        
