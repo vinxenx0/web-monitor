@@ -2337,6 +2337,9 @@ if __name__ == "__main__":
 
                                 if response.status_code == 200:
                                     
+                                    # Reemplazar la cadena "class="collapse" por "class="collapse show"
+                                    contenido = response.text.replace('class="collapse"', 'class="collapse show"')
+                                    
                                     # Parsear el contenido HTML
                                     soup = BeautifulSoup(response.text, 'html.parser')
 
