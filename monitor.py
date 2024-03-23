@@ -1318,8 +1318,13 @@ def escanear_dominio(url_dominio, exclusiones=[], extensiones_excluidas=[]):
             ]
 
             urls_por_escanear.extend(enlaces_filtrados)
+        #except Exception as e:
+        #    print(f"Error al escanear {url_actual}: {str(e)}")
         except Exception as e:
-            print(f"Error al escanear {url_actual}: {str(e)}")
+            with open("traceback.txt", "w") as f:
+                 traceback.print_exc(file=f)
+
+
 
         urls_escaneadas.add(url_actual)
 
