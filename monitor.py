@@ -1632,20 +1632,34 @@ if __name__ == "__main__":
     #carga las configuraciones
 
     print("aqui llega 4")
-                           
+
     ultima_configuracion = session.query(Configuracion).order_by(desc(Configuracion.id)).first()
 
     if ultima_configuracion:
         IS_RUNNING = ultima_configuracion.is_running
-        DOMINIOS_ESPECIFICOS = ultima_configuracion.dominios_analizar.split('\r\n') if ultima_configuracion.dominios_analizar else []
-        #DOMINIOS_ESPECIFICOS = json.dumps(ultima_configuracion.dominios_analizar) if ultima_configuracion.dominios_analizar else []
+        DOMINIOS_ESPECIFICOS = [dominio for dominio in ultima_configuracion.dominios_analizar.split('\r\n') if dominio.strip()] if ultima_configuracion.dominios_analizar else []
         FRECUENCIA = ultima_configuracion.frecuencia_dias
         W3C_VALIDATOR = ultima_configuracion.w3c_validator
-        PATRONES_EXCLUSION = ultima_configuracion.url_Excluidas.split('\r\n') if ultima_configuracion.url_Excluidas else []
-        EXTENSIONES_EXCLUIDAS = ultima_configuracion.extensiones_Excluidas.split('\r\n') if ultima_configuracion.extensiones_Excluidas else []
-        KEYWORDS = ultima_configuracion.keywords_analizar.split('\r\n') if ultima_configuracion.keywords_analizar else []
+        PATRONES_EXCLUSION = [patron for patron in ultima_configuracion.url_Excluidas.split('\r\n') if patron.strip()] if ultima_configuracion.url_Excluidas else []
+        EXTENSIONES_EXCLUIDAS = [extension for extension in ultima_configuracion.extensiones_Excluidas.split('\r\n') if extension.strip()] if ultima_configuracion.extensiones_Excluidas else []
+        KEYWORDS = [keyword for keyword in ultima_configuracion.keywords_analizar.split('\r\n') if keyword.strip()] if ultima_configuracion.keywords_analizar else []
     else:
-        print("error recuperando config")
+        print("Error al recuperar la configuración.")
+
+                           
+    #ultima_configuracion = session.query(Configuracion).order_by(desc(Configuracion.id)).first()
+    #
+    #if ultima_configuracion:
+    #    IS_RUNNING = ultima_configuracion.is_running
+    #    DOMINIOS_ESPECIFICOS = ultima_configuracion.dominios_analizar.split('\r\n') if ultima_configuracion.dominios_analizar else []
+        #DOMINIOS_ESPECIFICOS = json.dumps(ultima_configuracion.dominios_analizar) if ultima_configuracion.dominios_analizar else []
+    #    FRECUENCIA = ultima_configuracion.frecuencia_dias
+    #    W3C_VALIDATOR = ultima_configuracion.w3c_validator
+    #    PATRONES_EXCLUSION = ultima_configuracion.url_Excluidas.split('\r\n') if ultima_configuracion.url_Excluidas else []
+    #    EXTENSIONES_EXCLUIDAS = ultima_configuracion.extensiones_Excluidas.split('\r\n') if ultima_configuracion.extensiones_Excluidas else []
+    #    KEYWORDS = ultima_configuracion.keywords_analizar.split('\r\n') if ultima_configuracion.keywords_analizar else []
+    #else:
+    #    print("error recuperando config")
         
     #print("palabras diccionario de la base de datos dos diccionarios USUARIO")
     palabras_a_revisar = [palabra.palabra for palabra in session.query(Diccionario_usuario).all()]
@@ -2310,9 +2324,29 @@ if __name__ == "__main__":
                                 response = requests.get(resultado.pagina)
 
                                 if response.status_code == 200:
-                                    # Parsear el HTML y buscar palabras de errores ortográficos
-                                    soup = BeautifulSoup(response.text,
-                                                        'html.parser')
+                                    
+                                    # Parsear el contenido HTML
+                                    soup = BeautifulSoup(response.text, 'html.parser')
+
+                                    # Buscar todas las etiquetas de texto (p, div, span, etc.)
+                                    etiquetas_texto = soup.find_all(text=True)
+
+                                    # Buscar palabras con errores ortográficos y resaltarlas con CSS
+                                    for tag in etiquetas_texto:
+                                        contenido_tag = str(tag)
+                                        for error in resultado.errores_ortograficos:
+                                            # Usamos expresiones regulares para encontrar todas las ocurrencias de la palabra con errores ortográficos
+                                            contenido_tag = re.sub(r'\b' + re.escape(error) + r'\b', f'<span style="color:white!important;background-color:red!important">{error}</span>', contenido_tag, flags=re.IGNORECASE)
+                                        tag.replace_with(BeautifulSoup(contenido_tag, 'html.parser'))  # Creamos un nuevo objeto BeautifulSoup con el contenido modificado
+
+
+                                    # Generar el contenido HTML con las palabras resaltadas
+                                    contenido_html = str(soup)
+
+
+                                    # Guardar el contenido HTML en un archivo
+                                    with open('pagina_con_errores.html', 'w', encoding='utf-8') as file:
+                                        file.write(contenido_html)
 
                                     # Obtener el texto visible de la página
                                     texto_visible = soup.get_text()
@@ -2352,6 +2386,9 @@ if __name__ == "__main__":
                                         resultado.flesh_score = 0.0
 
                                     modified_html = response.text
+                                    #modified_html = BeautifulSoup(response.text,'html.parser')
+                                    #modified_html = str(soup)
+
 
                                     modified_html = str(soup).encode(
                                         'utf-8').decode('utf-8', 'ignore')
@@ -2359,8 +2396,7 @@ if __name__ == "__main__":
                                         modified_html.split()
                                     )  # Eliminar espacios adicionales
                                     modified_html = modified_html.replace(
-                                        '\n', '').replace('\t',
-                                                        '').replace('\r', '')
+                                        '\n', '').replace('\t','').replace('\r', '')
 
                                     for palabra in resultado.errores_ortograficos:
                                         # Encontrar la posición de la palabra en el HTML original
@@ -2386,7 +2422,7 @@ if __name__ == "__main__":
                                             if start_index != -1:
                                                 modified_html = (
                                                 modified_html[:start_index] +
-                                                f'<span style="background-color:red!important;color:white!important;border:2px solid #fff!important">{palabra}</span>'
+                                                f'<span style="background-color:red!important;color:white!important;border:2px solid #fff!important">***{palabra}***</span>'
                                                 + modified_html[start_index +
                                                 len(palabra):])
 
@@ -2414,7 +2450,8 @@ if __name__ == "__main__":
                                     # Escribir el HTML en el archivo
                                     with open(filepath, 'w',
                                             encoding='utf-8') as file:
-                                        file.write(modified_html)
+                                        #file.write(modified_html)
+                                        file.write(contenido_html)
 
                                     print(f"HTML guardado en: {filepath}")
 
