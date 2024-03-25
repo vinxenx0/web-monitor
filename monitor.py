@@ -56,6 +56,7 @@ class Resultado(Base):
     imagenes = Column(JSON)
     enlaces_totales = Column(Integer)
     enlaces_inseguros = Column(Integer)
+    enlaces_inseguros_json = Column(JSON)
     enlaces_internos = Column(Integer)
     enlaces_internos_unicos = Column(Integer)
     enlaces_js_unicos = Column(Integer)
@@ -2352,12 +2353,32 @@ if __name__ == "__main__":
                                     etiquetas_texto = soup.find_all(text=True)
 
                                     # Buscar palabras con errores ortográficos y resaltarlas con CSS
+                                    #for tag in etiquetas_texto:
+                                    #    contenido_tag = str(tag)
+                                        
+                                    #    for error in resultado.errores_ortograficos:
+                                            # Usamos expresiones regulares para encontrar todas las ocurrencias de la palabra con errores ortográficos
+                                    #        contenido_tag = re.sub(r'\b' + re.escape(error) + r'\b', f'<span style="color:white!important;background-color:red!important">{error}</span>', contenido_tag, flags=re.IGNORECASE)
+                                    #    tag.replace_with(BeautifulSoup(contenido_tag, 'html.parser'))  # Creamos un nuevo objeto BeautifulSoup con el contenido modificado
+
+                                    # Definir las etiquetas que queremos excluir
+                                    etiquetas_excluidas = ['alt', 'script', 'a','img','meta','link']
+
+                                    # Definir expresión regular para encontrar nombres de archivo y direcciones URL
+                                    regex_archivo_url = r'(?:\b\w+://|www\.)\S+\b|\b\w+\.(?:com|net|org|edu|es|cat|gov|mil|int|info|biz)\b'
+
+                                    # Buscar palabras con errores ortográficos y resaltarlas con CSS
                                     for tag in etiquetas_texto:
                                         contenido_tag = str(tag)
-                                        for error in resultado.errores_ortograficos:
-                                            # Usamos expresiones regulares para encontrar todas las ocurrencias de la palabra con errores ortográficos
-                                            contenido_tag = re.sub(r'\b' + re.escape(error) + r'\b', f'<span style="color:white!important;background-color:red!important">{error}</span>', contenido_tag, flags=re.IGNORECASE)
-                                        tag.replace_with(BeautifulSoup(contenido_tag, 'html.parser'))  # Creamos un nuevo objeto BeautifulSoup con el contenido modificado
+                                        # Verificar si la etiqueta actual está dentro de una etiqueta excluida
+                                        if tag.parent.name not in etiquetas_excluidas:
+                                            for error in resultado.errores_ortograficos:
+                                                # Verificar que la palabra no sea un nombre de archivo o una dirección URL
+                                                if not re.match(regex_archivo_url, error, re.IGNORECASE):
+                                                    # Usar expresiones regulares para encontrar todas las ocurrencias de la palabra con errores ortográficos
+                                                    contenido_tag = re.sub(r'\b' + re.escape(error) + r'\b', f'<span style="color:white!important;background-color:red!important">{error}</span>', contenido_tag, flags=re.IGNORECASE)
+                                            tag.replace_with(BeautifulSoup(contenido_tag, 'html.parser'))  # Crear un nuevo objeto BeautifulSoup con el contenido modificado
+
 
 
                                     # Generar el contenido HTML con las palabras resaltadas
