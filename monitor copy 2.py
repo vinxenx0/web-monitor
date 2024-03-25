@@ -5,8 +5,6 @@
 # (c) vicente b. lopez plaza
 # vinxenxo@protonmail.com
 
-import traceback
-
 import csv
 import re
 import json
@@ -480,27 +478,18 @@ def extraer_meta_tags(response_text, response):
         header[0] for header in response.headers
     ]
 
-   # Verificar si existe un elemento h1 antes de acceder a su atributo 'text'
-    h1_element = soup.find('h1')
-    if h1_element is not None:
-        h1_text = h1_element.text
-    else:
-        h1_text = ""  # O cualquier otro valor predeterminado que desees usar en este caso
-
     titulos_pagina_menos_30_caracteres = any(
-        len(tag.text) < 30 if tag.text else False
+        len(tag.text) < 30
         for tag in soup.find_all(['h1', 'h2', 'h3', 'h4', 'h5', 'h6']))
     meta_description_menos_70_caracteres = any(
         len(tag.get('content', '')) < 70 for tag in meta_tags
         if tag.get('name') == 'description')
     titulos_pagina_mas_60_caracteres = any(
-        len(tag.text) > 60 if tag.text else False
+        len(tag.text) > 60
         for tag in soup.find_all(['h1', 'h2', 'h3', 'h4', 'h5', 'h6']))
-
     titulos_pagina_igual_h1 = any(
-        tag.text == h1_text if tag.text else False
+        tag.text == soup.find('h1').text
         for tag in soup.find_all(['h2', 'h3', 'h4', 'h5', 'h6']))
-
     titulos_pagina_duplicado = any(
         meta_tags_info.count(tag) > 1 for tag in meta_tags_info
         if tag.get('name') == 'title')
@@ -832,7 +821,6 @@ def analizar_meta_tags(response_text):
 
     title_content = None
     desc_content = None
-    tag_name = None
 
     # Obtener las etiquetas específicas
     body_tag = soup.find('body')
@@ -1318,13 +1306,8 @@ def escanear_dominio(url_dominio, exclusiones=[], extensiones_excluidas=[]):
             ]
 
             urls_por_escanear.extend(enlaces_filtrados)
-        #except Exception as e:
-        #    print(f"Error al escanear {url_actual}: {str(e)}")
         except Exception as e:
-            with open("traceback.txt", "w") as f:
-                 traceback.print_exc(file=f)
-
-
+            print(f"Error al escanear {url_actual}: {str(e)}")
 
         urls_escaneadas.add(url_actual)
 
@@ -2342,9 +2325,6 @@ if __name__ == "__main__":
 
                                 if response.status_code == 200:
                                     
-                                    # Reemplazar la cadena "class="collapse" por "class="collapse show"
-                                    contenido = response.text.replace('class="collapse"', 'class="collapse show"')
-                                    
                                     # Parsear el contenido HTML
                                     soup = BeautifulSoup(response.text, 'html.parser')
 
@@ -2553,11 +2533,9 @@ if __name__ == "__main__":
                             )
 
                         # Confirmar los cambios en la base de datos
-                        #session.commit()
+                        session.commit()
         finally:
-                session.commit()
                 eliminar_lock(session)
-                #session.commit()
                 end_script_time = time.time()
                 script_duration = end_script_time - start_script_time
 
@@ -2572,4 +2550,3 @@ if __name__ == "__main__":
                 generar_informe_resumen(resumen_escaneo, 'resumen_escaneo.csv')
     else:
         print("El script no se ejecutará debido a la existencia del archivo .lock.")
-        
