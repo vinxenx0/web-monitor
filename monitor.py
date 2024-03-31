@@ -2365,7 +2365,9 @@ if __name__ == "__main__":
                                     etiquetas_excluidas = ['alt', 'script', 'a','img','meta','link']
 
                                     # Definir expresión regular para encontrar nombres de archivo y direcciones URL
-                                    regex_archivo_url = r'(?:\b\w+://|www\.)\S+\b|\b\w+\.(?:com|net|org|edu|es|cat|gov|mil|int|info|biz)\b'
+                                    #regex_archivo_url = r'(?:\b\w+://|www\.)\S+\b|\b\w+\.(?:com|net|org|edu|es|cat|gov|mil|int|info|biz)\b'
+                                    regex_archivo_url = r'(?<!https?:\/\/)(?:\b\w+://|www\.)\S+\b|\b\w+\.(?:com|net|org|edu|es|cat|gov|mil|int|info|biz)\b'
+
 
                                     # Buscar palabras con errores ortográficos y resaltarlas con CSS
                                     for tag in etiquetas_texto:
